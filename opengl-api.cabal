@@ -1,0 +1,25 @@
+Name:                opengl-api
+Version:             0.1
+Synopsis:            Parser for the OpenGL spec files.
+Description:         Parser for the OpenGL spec files.
+License:             BSD3
+License-file:        LICENSE
+Author:              Vo Minh Thu <noteed@gmail.com>
+Maintainer:          Vo Minh Thu <noteed@gmail.com>
+Stability:           Provisional
+Category:            Parsing
+Build-type:          Simple
+Extra-source-files:  README.md
+Cabal-version:       >=1.6
+
+Source-repository head
+  type: git
+  location: git://github.com/noteed/opengl-api.git
+
+Library
+  Exposed-modules:     Text.OpenGL.Spec
+
+  Build-depends:       base >= 4 && < 5,
+                       parsec >= 3.1 && < 3.2
+
+  ghc-options:         -Wall
