@@ -13,7 +13,10 @@ module Text.OpenGL.Spec (
   parseAndShow, reparse,
 
   TmLine(..), TmType(..),
-  tmLines, tmLine
+  tmLines, tmLine,
+
+  FunLine(..), Field(..),
+  funLines, funLine
   ) where
 
 import Numeric (readHex, showHex)
@@ -424,8 +427,51 @@ data FunLine =
   | Tag String [String]
   | FPassthru String
   | Function String [String]
-  | Field  String String -- the second String should be breaked into smaller parts
+  | Field Field
   | At String
+  deriving (Eq, Show)
+
+data Field =
+    Return String
+  | Param String String -- break into smaller parts
+  | Category String String -- the last is a comment, should be Maybe
+  | Subcategory String
+  | FVersion Int Int
+  | Glxropcode Glxropcode
+  | Offset (Maybe Offset)
+  | Wglflags [String]
+  | Dlflags String
+  | Glxflags [String] (Maybe String) -- The last is the comment
+  | Glxsingle Glxsingle
+  | Deprecated Int Int
+  | Vectorequiv String
+  | FExtension [String] -- verify if it should be Maybe String instead
+  | Glxvendorpriv Glxvendorpriv
+  | Glfflags [String]
+  | Beginend [String] -- TODO Maybe instead of [] ?
+  | Glxvectorequiv String -- TODO Bool ?
+  | Alias String
+  | Glextmask [String]
+  deriving (Eq, Show)
+
+data Glxropcode =
+    Number Int (Maybe String)
+  | QuestionMark
+  deriving (Eq, Show)
+
+data Glxsingle =
+    Number2 Int
+  | QuestionMark2
+  deriving (Eq, Show)
+
+data Offset =
+    Number3 Int
+  | QuestionMark3
+  deriving (Eq, Show)
+
+data Glxvendorpriv =
+    Number4 Int
+  | QuestionMark4
   deriving (Eq, Show)
 
 ----------------------------------------------------------------------
@@ -447,6 +493,9 @@ tag = many1 . oneOf $ "_-" ++ ['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z']
 tagValue :: P String
 tagValue = (many1 . oneOf $ "_-*." ++ ['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z'])
   <* blanks
+
+field :: String -> P ()
+field s = () <$ (blanks1 >> token s)
 
 pFunLine :: P FunLine
 pFunLine = choice
@@ -471,8 +520,117 @@ pFunction = Function <$>
   <* eol
 
 pField :: P FunLine
-pField = Field <$> (blanks1 *> identifier_) <*> many (noneOf "\n") <* eol
+pField = Field <$> choice
+  [ try pReturn
+  , try pParam
+  , try pCategory
+  , try pVersion
+  , try pGlxropcode
+  , try pOffset
+  , try pWglflags
+  , try pDlflags
+  , try pGlxflags
+  , try pGlxsingle
+  , try pDeprecated
+  , try pVectorequiv
+  , try pExtension
+  , try pGlxvendorpriv
+  , try pGlfflags
+  , try pBeginend
+  , try pGlxvectorequiv
+  , try pAlias
+  , try pSubcategory
+  , try pGlextmask
+  ]
 
 pAt :: P FunLine
 pAt = At <$> (token "@@@" *> many (noneOf "\n")) <* eol
+
+pReturn :: P Field
+pReturn = Return <$> (field "return" *> identifier) <* eol
+
+pParam :: P Field
+pParam = Param <$> (field "param" *> identifier_) <*> (many $ noneOf "\n") <* eol
+
+pCategory :: P Field
+pCategory = Category <$> (field "category" *> identifier_) <*> (many $ noneOf "\n") <* eol
+
+pVersion :: P Field
+pVersion = FVersion <$> (field "version" *> digit' <* char '.') <*> digit' <* eol
+
+pGlxropcode :: P Field
+pGlxropcode = Glxropcode <$> (field "glxropcode" *> pGlxropcode') <* eol
+
+pGlxropcode' :: P Glxropcode
+pGlxropcode' =
+  Number <$> (read <$> many1 digit) <*> optional (identifier)
+  <|> QuestionMark <$ string "?"
+
+pOffset :: P Field
+pOffset = Offset <$> (field "offset" *> optional pOffset') <* eol
+
+pOffset' :: P Offset
+pOffset' = 
+  Number3 . read <$> many1 digit
+  <|> QuestionMark3 <$ string "?"
+
+pWglflags :: P Field
+pWglflags = Wglflags <$> (field "wglflags" *> many (tag <* blanks)) <* eol
+
+pDlflags :: P Field
+pDlflags = Dlflags <$> (field "dlflags" *> tag) <* eol
+
+pGlxflags :: P Field
+pGlxflags = Glxflags <$>
+  (field "glxflags" *> many (tag <* blanks)) <*>
+  optional (many $ noneOf "\n")
+  <* eol
+
+pGlxsingle :: P Field
+pGlxsingle = Glxsingle <$> (field "glxsingle" *> pGlxsingle') <* eol
+
+pGlxsingle' :: P Glxsingle
+pGlxsingle' = 
+  Number2 . read <$> many1 digit
+  <|> QuestionMark2 <$ string "?"
+
+pDeprecated :: P Field
+pDeprecated = Deprecated <$>
+  (field "deprecated" *> digit' <* char '.') <*> digit' <* eol
+
+pVectorequiv :: P Field
+pVectorequiv = Vectorequiv <$> (field "vectorequiv" *> identifier_) <* eol
+
+pExtension :: P Field
+pExtension =  FExtension <$> (field "extension" *> many identifier_) <* eol
+
+pGlxvendorpriv :: P Field
+pGlxvendorpriv =
+  Glxvendorpriv <$> (field "glxvendorpriv" *> pGlxvendorpriv') <* eol
+
+pGlxvendorpriv' :: P Glxvendorpriv
+pGlxvendorpriv' = 
+  Number4 . read <$> many1 digit
+  <|> QuestionMark4 <$ string "?"
+
+-- TODO Maybe instead of [] ?
+pGlfflags :: P Field
+pGlfflags = Glfflags <$> (field "glfflags" *> many (tag <* blanks)) <* eol
+
+pBeginend :: P Field
+pBeginend = Beginend <$> (field "beginend" *> many (tag <* blanks)) <* eol
+
+pGlxvectorequiv :: P Field
+pGlxvectorequiv =
+  Glxvectorequiv <$> (field "glxvectorequiv" *> identifier_) <* eol
+
+pAlias :: P Field
+pAlias = Alias <$> (field "alias" *> identifier_) <* eol
+
+pSubcategory :: P Field
+pSubcategory = Subcategory <$> (field "subcategory" *> identifier_) <* eol
+
+pGlextmask :: P Field
+pGlextmask =
+  Glextmask <$> (field "glextmask" *> sepBy identifier (token "|")) <* eol
 
