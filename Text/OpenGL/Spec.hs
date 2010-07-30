@@ -116,7 +116,7 @@ type P a = GenParser Char () a
 pEnumLine :: P EnumLine
 pEnumLine = choice
   [ try (Comment <$> pComment)
-  , try pBlankLine
+  , try (BlankLine <$ pBlankLine)
   , try pStart
   , try pPassthru
   , try pEnum
@@ -162,8 +162,8 @@ pComment = (\a b c -> concat [a,b,c]) <$>
   blanks <*> (string "#") <*> (many $ noneOf "\n")
   <* eol
 
-pBlankLine :: P EnumLine
-pBlankLine = BlankLine <$ (blanks >> eol)
+pBlankLine :: P ()
+pBlankLine = () <$ (blanks >> eol)
 
 pStart :: P EnumLine
 pStart = Start <$> pStartEnum <*>
@@ -407,4 +407,72 @@ pTmType = choice $ map try
 ----------------------------------------------------------------------
 -- Printing (TODO)
 ----------------------------------------------------------------------
+
+----------------------------------------------------------------------
+--
+-- Functions (gl.spec)
+--
+----------------------------------------------------------------------
+
+----------------------------------------------------------------------
+-- Data structures (line oriented)
+----------------------------------------------------------------------
+
+data FunLine =
+    FComment String
+  | FBlankLine
+  | Tag String [String]
+  | FPassthru String
+  | Function String [String]
+  | Field  String String -- the second String should be breaked into smaller parts
+  | At String
+  deriving (Eq, Show)
+
+----------------------------------------------------------------------
+-- Parsing (line oriented)
+----------------------------------------------------------------------
+
+-- | Parse a complete gl.spec.
+funLines :: String -> Either ParseError [FunLine]
+funLines = parse (many pFunLine <* eof) "funLines"
+
+-- | Try to parse a line to its 'TMLine' representation.
+-- The '\n' character should be present at the end of the input.
+funLine :: String -> Either ParseError FunLine
+funLine = parse pFunLine "funLine"
+
+tag :: P String
+tag = many1 . oneOf $ "_-" ++ ['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z']
+
+tagValue :: P String
+tagValue = (many1 . oneOf $ "_-*." ++ ['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z'])
+  <* blanks
+
+pFunLine :: P FunLine
+pFunLine = choice
+  [ try (FComment <$> pComment)
+  , try (FBlankLine <$ pBlankLine)
+  , try pFPassthru
+  , try pTag
+  , try pFunction
+  , try pField
+  , pAt
+  ]
+
+pFPassthru :: P FunLine
+pFPassthru = FPassthru <$> (string "passthru:" *> many (noneOf "\n") <* eol)
+
+pTag :: P FunLine
+pTag = Tag <$> (tag <* char ':' <* blanks) <*> many tagValue <* eol
+
+pFunction :: P FunLine
+pFunction = Function <$>
+  identifier <*> (char '(' *> sepBy identifier (token ",") <* char ')')
+  <* eol
+
+pField :: P FunLine
+pField = Field <$> (blanks1 *> identifier_) <*> many (noneOf "\n") <* eol
+
+pAt :: P FunLine
+pAt = At <$> (token "@@@" *> many (noneOf "\n")) <* eol
 
