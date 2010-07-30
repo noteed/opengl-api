@@ -18,3 +18,7 @@ The representation includes comments, blank lines, and passthru lines.
   line, no passthru, maybe references already resolved, and a single number
   format.
 - Offer a parser for `enum.spec`.
+- State in the doc that there is some doc about the spec file format at the
+  good old Haskell-OpenGL [page][]!
+
+[page]: http://www.haskell.org/HOpenGL-old/spec_explained.html
