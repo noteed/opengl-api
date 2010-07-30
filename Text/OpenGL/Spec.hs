@@ -2,7 +2,8 @@
 -- |
 -- Code to represent and parse the enumext.spec file of the OpenGL
 -- registry. It works on the revision: 11742 (dated Tue, 15 Jun 2010),
--- i.e. OpenGL 4.1.
+-- i.e. OpenGL 4.0. (The 4.1 specification appeared at the end of
+-- July but the spec files are older.)
 --
 -- There is also some code to print the result back to something
 -- close to the original representation, for checking purpose.
