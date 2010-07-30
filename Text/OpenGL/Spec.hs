@@ -10,7 +10,10 @@
 module Text.OpenGL.Spec (
   EnumLine(..), StartEnum(..), Value(..), Extension(..),
   enumLines, enumLine,
-  parseAndShow, reparse
+  parseAndShow, reparse,
+
+  TmLine(..), TmType(..),
+  tmLines, tmLine
   ) where
 
 import Numeric (readHex, showHex)
@@ -18,6 +21,13 @@ import Data.Char (toUpper)
 import Control.Applicative
 import Text.ParserCombinators.Parsec hiding
   (many, optional, (<|>), token)
+
+
+----------------------------------------------------------------------
+--
+-- Enumerants (enumext.spec)
+--
+----------------------------------------------------------------------
 
 ----------------------------------------------------------------------
 -- Data structures (line oriented)
@@ -105,7 +115,7 @@ type P a = GenParser Char () a
 
 pEnumLine :: P EnumLine
 pEnumLine = choice
-  [ try pComment
+  [ try (Comment <$> pComment)
   , try pBlankLine
   , try pStart
   , try pPassthru
@@ -141,11 +151,14 @@ value = Hex . fst . head . readHex <$>
   <|> Deci . read <$> many1 digit
   <|> String <$> identifier
 
+opt :: String -> P Bool
+opt s = maybe False (const True) <$> optional (string s)
+
 hexSuffix :: P (Maybe HexSuffix)
 hexSuffix = optional $ try (Ull <$ string "ull") <|> (U <$ string "u")
 
-pComment :: P EnumLine
-pComment = (\a b c -> Comment $ concat [a,b,c]) <$>
+pComment :: P String
+pComment = (\a b c -> concat [a,b,c]) <$>
   blanks <*> (string "#") <*> (many $ noneOf "\n")
   <* eol
 
@@ -177,10 +190,10 @@ pStartEnum =
   Version <$>
   (string "VERSION_" *> digit') <*>
   (char '_' *> digit') <*>
-  (maybe False (const True) <$> optional (string "_DEPRECATED"))
+  (opt "_DEPRECATED")
   <|>
   Extension <$> pExt <*> (char '_' *> identifier) <*>
-  (maybe False (const True) <$> optional (string "_DEPRECATED"))
+  (opt "_DEPRECATED")
   <|>
   Name <$> many alphaNum
 
@@ -291,4 +304,107 @@ reparse fn = do
         "Error when parsing the printed result: " ++ show err
       Right b | a == b -> putStrLn "All's well that ends well."
               | otherwise -> putStrLn "Ouch, not good."
+
+----------------------------------------------------------------------
+--
+-- Typemap (gl.tm)
+--
+----------------------------------------------------------------------
+
+----------------------------------------------------------------------
+-- Data structures (line oriented)
+----------------------------------------------------------------------
+
+data TmLine =
+    TmComment String
+  | TmEntry String TmType
+  deriving (Eq, Show)
+
+-- - The boolean is used for the presence or not of a *.
+-- - The suffix Star is used when the * is always present.
+data TmType =
+    Star -- for void
+  | GLbitfield
+  | GLboolean Bool
+  | GLbyte
+  | GLchar Bool
+  | GLcharARB Bool
+  | GLclampd
+  | GLclampf
+  | GLdouble Bool
+  | GLenum
+--  | GLenumWithTrailingComma -- removed from the source
+  | GLfloat Bool
+  | UnderscoreGLfuncptr
+  | GLhalfNV
+  | GLhandleARB
+  | GLint
+  | GLint64
+  | GLint64EXT
+  | GLintptr
+  | GLintptrARB
+  | GLshort
+  | GLsizei
+  | GLsizeiptr
+  | GLsizeiptrARB
+  | GLsync
+  | GLubyte
+  | ConstGLubyteStar
+  | GLuint
+  | GLuint64
+  | GLuint64EXT
+  | GLUnurbsStar
+  | GLUquadricStar
+  | GLushort
+  | GLUtesselatorStar
+  | GLvoid Bool
+  | GLvoidStarConst
+  deriving (Eq, Read, Show)
+
+----------------------------------------------------------------------
+-- Parsing (line oriented)
+----------------------------------------------------------------------
+
+-- | Parse a complete gl.tm.
+tmLines :: String -> Either ParseError [TmLine]
+tmLines = parse (many pTmLine <* eof) "tmLines"
+
+-- | Try to parse a line to its 'TMLine' representation.
+-- The '\n' character should be present at the end of the input.
+tmLine :: String -> Either ParseError TmLine
+tmLine = parse pTmLine "tmLine"
+
+pTmLine :: P TmLine
+pTmLine = choice
+  [ try (TmComment <$> pComment)
+  , pTmEntry
+  ]
+
+pTmEntry :: P TmLine
+pTmEntry = TmEntry <$>
+  (identifier <* token ",*,*,") <*> pTmType
+  <* (string ",*,*" >> opt ",") -- ignore trailing comma after GLenum line.
+  <* eol
+
+pTmType :: P TmType
+pTmType = choice $ map try
+  [ Star <$ string "*"
+  , ConstGLubyteStar <$ string "const GLubyte *"
+  , UnderscoreGLfuncptr <$ string "_GLfuncptr"
+  , GLvoidStarConst <$ string "GLvoid* const"
+  , GLboolean <$> (string "GLboolean" *> opt "*")
+  , GLcharARB <$> (string "GLcharARB" *> opt "*")
+  , GLchar <$> (string "GLchar" *> opt "*")
+  , GLdouble <$> (string "GLdouble" *> opt "*")
+  , GLfloat <$> (string "GLfloat" *> opt "*")
+  , GLvoid <$> (string "GLvoid" *> opt "*")
+  , GLUnurbsStar <$ string "GLUnurbs*"
+  , GLUquadricStar <$ string "GLUquadric*"
+  , GLUtesselatorStar <$ string "GLUtesselator*"
+  , read <$> identifier
+  ]
+
+----------------------------------------------------------------------
+-- Printing (TODO)
+----------------------------------------------------------------------
 
