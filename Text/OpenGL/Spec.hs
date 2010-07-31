@@ -57,6 +57,8 @@ data EnumLine =
   deriving (Eq, Show)
 
 -- | The different ways to start an enumeration.
+
+-- TODO find a better name; it is used for Category.
 data StartEnum =
     Version Int Int Bool
   -- ^ Major, minor, the bool indicates if it is deprecated.
@@ -191,14 +193,16 @@ pUse = Use <$>
 pStartEnum :: P StartEnum
 pStartEnum =
   Version <$>
-  (string "VERSION_" *> digit') <*>
+  try (string "VERSION_" *> digit') <*>
   (char '_' *> digit') <*>
   (opt "_DEPRECATED")
   <|>
   Extension <$> pExt <*> (char '_' *> identifier) <*>
   (opt "_DEPRECATED")
   <|>
-  Name <$> many alphaNum
+  Name <$> tag -- many1 alphaNum
+  -- alphaNum is enough for enumext.spec;
+  -- tag is used for the CategoryProp.
 
 pExt :: P Extension
 pExt = choice $ map (fmap r . try . string)
@@ -462,6 +466,7 @@ data Property =
   | ExtensionProp
   -- ^ Hardcoded counter part:
   -- future not_implemented soft WINSOFT NV10 NV20 NV50
+  -- future and not_implemented are unused.
   | AliasProp
   -- ^ Hardcoded counter part: *
   | OffsetProp
@@ -496,7 +501,7 @@ data Prop =
   | Glxsingle Question
   | Deprecated Int Int
   -- ^ Only 3.1 for now.
-  | FExtension [String] -- TODO use an enum
+  | FExtension [FExtension]
   | Glxvendorpriv Question
   | Glfflags [Glfflag]
   | AllowInside
@@ -512,7 +517,8 @@ data Prop =
   | Glextmask [String]
   deriving (Eq, Show)
 
-type Category = String -- TODO proper data type
+-- TODO is it ok to reuse StartEnum ?
+type Category = StartEnum
 
 data ReturnType =
     Boolean
@@ -531,10 +537,11 @@ data ReturnType =
   deriving (Eq, Show)
 
 -- | The boolean is true if it is an in type, false if it is out.
-data ParamType = ParamType String Bool ValueOrArray
+-- TODO maybe the String should be specialized.
+data ParamType = ParamType String Bool Passing
   deriving (Eq, Show)
 
-data ValueOrArray =
+data Passing =
     Value
   | Array String Bool
   -- ^ The boolean is true if it is retained, false otherwise.
@@ -543,6 +550,9 @@ data ValueOrArray =
   deriving (Eq, Show)
 
 data Question = Mark | Number Int
+  deriving (Eq, Show)
+
+data FExtension = Soft | Winsoft | NV10 | NV20 | NV50
   deriving (Eq, Show)
 
 data Wglflag =
@@ -623,7 +633,7 @@ pProperty = Property <$> choice (map try
     token "server-handcode" *> token "EXT" *> token "SGI" *>
     token "ignore" *> string "ARB")
   , VectorequivProp <$ (token "vectorequiv:" *> string "*")
-  , CategoryProp <$> (token "category:" *> many (tag <* blanks))
+  , CategoryProp <$> (token "category:" *> many (pStartEnum <* blanks))
   , VersionProp <$> (token "version:" *> many (version <* blanks))
   , DeprecatedProp <$> (token "deprecated:" *> many (version <* blanks))
   , GlxsingleProp <$ (token "glxsingle:" *> string "*")
@@ -644,7 +654,7 @@ pProperty = Property <$> choice (map try
   ]) <* eol
 
 pNewCategory :: P FunLine
-pNewCategory = NewCategory <$> (token "newcategory:" *> identifier <*) eol
+pNewCategory = NewCategory <$> (token "newcategory:" *> pStartEnum <*) eol
 
 pFunction :: P FunLine
 pFunction = Function <$>
@@ -706,7 +716,7 @@ pParamType :: P ParamType
 pParamType = ParamType <$>
   identifier_ <*>
   pInOrOut <*>
-  pValueOrArray
+  pPassing
 
 pInOrOut :: P Bool
 pInOrOut = choice
@@ -714,9 +724,8 @@ pInOrOut = choice
   , False <$ token "out"
   ]
 
--- TODO or Reference
-pValueOrArray :: P ValueOrArray
-pValueOrArray = Value <$ string "value"
+pPassing :: P Passing
+pPassing = Value <$ string "value"
   <|>
   Array <$>
   (token "array" *> char '[' *> many (noneOf "\n]") <* char ']') <*>
@@ -726,8 +735,8 @@ pValueOrArray = Value <$ string "value"
 
 pCategory :: P Prop
 pCategory = Category <$>
-  (field "category" *> identifier_) <*>
-  (optional $ token "# old:" *> many1 (noneOf "\n"))
+  (field "category" *> pStartEnum <* blanks) <*>
+  (optional $ token "# old:" *> pStartEnum)
   <* eol
 
 pVersion :: P Prop
@@ -788,7 +797,16 @@ pVectorequiv :: P Prop
 pVectorequiv = Vectorequiv <$> (field "vectorequiv" *> identifier_) <* eol
 
 pExtension :: P Prop
-pExtension =  FExtension <$> (field "extension" *> many identifier_) <* eol
+pExtension =  FExtension <$> (field "extension" *> many pFExtension) <* eol
+
+pFExtension :: P FExtension
+pFExtension = choice
+  [ Soft <$ token "soft"
+  , Winsoft <$ token "WINSOFT"
+  , NV10 <$ try (token "NV10")
+  , NV20 <$ try (token "NV20")
+  , NV50 <$ token "NV50"
+  ]
 
 pGlxvendorpriv :: P Prop
 pGlxvendorpriv =
