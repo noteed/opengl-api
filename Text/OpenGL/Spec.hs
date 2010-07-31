@@ -65,7 +65,7 @@ data StartEnum =
   | Name String
   deriving (Eq, Show)
 
-data Value = Hex Integer (Maybe HexSuffix) | Deci Int | String String
+data Value = Hex Integer (Maybe HexSuffix) | Deci Int | Identifier String
   deriving (Eq, Show)
 
 data HexSuffix = U | Ull
@@ -152,7 +152,7 @@ value = Hex . fst . head . readHex <$>
    try (string "0x" *> many1 hexDigit) <*>
    hexSuffix
   <|> Deci . read <$> many1 digit
-  <|> String <$> identifier
+  <|> Identifier <$> identifier
 
 opt :: String -> P Bool
 opt s = maybe False (const True) <$> optional (string s)
@@ -279,7 +279,7 @@ showValue v = case v of
   Hex i (Just U) -> "0x" ++ showHex' i ++ "u"
   Hex i (Just Ull) -> "0x" ++ showHex' i ++ "ull"
   Deci i -> show i
-  String x -> x
+  Identifier x -> x
 
 showHex' :: Integral a => a -> String
 showHex' i = replicate (4 - length h) '0' ++ h
@@ -424,54 +424,95 @@ pTmType = choice $ map try
 data FunLine =
     FComment String
   | FBlankLine
-  | Tag String [String]
+  | Tag String [String] -- TODO this is called property, make a variant for each.
   | FPassthru String
   | Function String [String]
-  | Field Field
+  | Field Field -- TODO this is called a property
   | At String
   deriving (Eq, Show)
 
+-- TODO Rename into Property
 data Field =
-    Return String
-  | Param String String -- break into smaller parts
-  | Category String String -- the last is a comment, should be Maybe
+    Return ReturnType
+  | Param String ParamType
+  -- ^ This pairs the name of a parameter with its type.
+  | Category String (Maybe String)
+   -- ^ TODO The String should be specialized. The Maybe is a commented
+   -- old value.
   | Subcategory String
   | FVersion Int Int
-  | Glxropcode Glxropcode
-  | Offset (Maybe Offset)
-  | Wglflags [String]
-  | Dlflags String
-  | Glxflags [String] (Maybe String) -- The last is the comment
-  | Glxsingle Glxsingle
+  | Glxropcode Question
+  | Offset (Maybe Question)
+  | Wglflags [Wglflag]
+  | Dlflags Dlflag
+  | Glxflags [Glxflag] (Maybe [Glxflag])
+  -- ^ The first list contains the actuals flags while the second list
+  -- contains commented flags. The Maybe wrapper could be removed.
+  | Glxsingle Question
   | Deprecated Int Int
+  -- ^ Only 3.1 for now.
+  | FExtension [String]
+  | Glxvendorpriv Question
+  | Glfflags [Glfflag]
+  | AllowInside
+  -- ^ The beginend property has always the value allow-inside, so instead of
+  -- a constructor Beginend String, this property works like a flag.
   | Vectorequiv String
-  | FExtension [String] -- verify if it should be Maybe String instead
-  | Glxvendorpriv Glxvendorpriv
-  | Glfflags [String]
-  | Beginend [String] -- TODO Maybe instead of [] ?
-  | Glxvectorequiv String -- TODO Bool ?
+  -- ^ See the following field's description.
+  | Glxvectorequiv String
+  -- ^ This could be a single flag: the equivalent name is derived from the
+  -- name of the function. It seems this flag is present exactly when
+  -- Vectorequiv is present.
   | Alias String
   | Glextmask [String]
   deriving (Eq, Show)
 
-data Glxropcode =
-    Number Int (Maybe String)
-  | QuestionMark
+data ReturnType =
+    Boolean
+  | BufferOffset
+  | ErrorCode
+  | FramebufferStatus
+  | GLEnum
+  | HandleARB
+  | Int32
+  | List
+  | String
+  | Sync
+  | UInt32
+  | Void
+  | VoidPointer
   deriving (Eq, Show)
 
-data Glxsingle =
-    Number2 Int
-  | QuestionMark2
+-- | The boolean is true if it is an in type, false if it is out.
+data ParamType = ParamType String Bool ValueOrArray
   deriving (Eq, Show)
 
-data Offset =
-    Number3 Int
-  | QuestionMark3
+data ValueOrArray =
+    Value
+  | Array String Bool
+  -- ^ The boolean is true if it is retained, false otherwise.
+  -- TODO The String should be specialized.
+  | Reference
   deriving (Eq, Show)
 
-data Glxvendorpriv =
-    Number4 Int
-  | QuestionMark4
+data Question = Mark | Number Int
+  deriving (Eq, Show)
+
+data Wglflag =
+    WglClientHandcode | WglServerHandcode | WglSmallData | WglBatchable
+  deriving (Eq, Show)
+
+data Dlflag = DlNotlistable | DlHandcode
+  deriving (Eq, Show)
+
+data Glxflag =
+    GlxClientHandcode | GlxServerHandcode | GlxClientIntercept
+  | GlxEXT | GlxSGI | GlxARB | GlxIgnore
+  deriving (Eq, Show)
+
+data Glfflag =
+    GlfCaptureExecute | GlfCaptureHandcode | GlfDecodeHandcode
+  | GlfPixelPack | GlfPixelUnpack | GlfGlEnum | GlfIgnore
   deriving (Eq, Show)
 
 ----------------------------------------------------------------------
@@ -496,6 +537,13 @@ tagValue = (many1 . oneOf $ "_-*." ++ ['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z'])
 
 field :: String -> P ()
 field s = () <$ (blanks1 >> token s)
+
+question :: P Question
+question =
+  Number . read <$> many1 digit <* opt "re"
+  -- TODO the 're' suffix is ignored, see if it is meaningful
+  -- It is only used in the glxropcode of PointParameteriv, line 5108
+  <|> Mark <$ string "?"
 
 pFunLine :: P FunLine
 pFunLine = choice
@@ -547,52 +595,106 @@ pAt :: P FunLine
 pAt = At <$> (token "@@@" *> many (noneOf "\n")) <* eol
 
 pReturn :: P Field
-pReturn = Return <$> (field "return" *> identifier) <* eol
+pReturn = Return <$> (field "return" *> pReturnType) <* eol
+
+pReturnType :: P ReturnType
+pReturnType = choice
+  [ try $ Boolean <$ string "Boolean"
+  , BufferOffset <$ string "BufferOffset"
+  , ErrorCode <$ string "ErrorCode"
+  , FramebufferStatus <$ string "FramebufferStatus"
+  , GLEnum <$ string "GLenum"
+  , HandleARB <$ string "handleARB"
+  , Int32 <$ string "Int32"
+  , List <$ string "List"
+  , try $ String <$ string "String"
+  , Sync <$ string "sync"
+  , UInt32 <$ string "UInt32"
+  , Void <$ string "void"
+  , VoidPointer <$ string "VoidPointer"
+  ]
 
 pParam :: P Field
-pParam = Param <$> (field "param" *> identifier_) <*> (many $ noneOf "\n") <* eol
+pParam = Param <$>
+  (field "param" *> identifier_) <*> pParamType <* eol
+
+pParamType :: P ParamType
+pParamType = ParamType <$>
+  identifier_ <*>
+  pInOrOut <*>
+  pValueOrArray
+
+pInOrOut :: P Bool
+pInOrOut = choice
+  [ True <$ token "in"
+  , False <$ token "out"
+  ]
+
+-- TODO or Reference
+pValueOrArray :: P ValueOrArray
+pValueOrArray = Value <$ string "value"
+  <|>
+  Array <$>
+  (token "array" *> char '[' *> many (noneOf "\n]") <* char ']') <*>
+  (blanks *> opt "retained")
+  <|>
+  Reference <$ string "reference"
 
 pCategory :: P Field
-pCategory = Category <$> (field "category" *> identifier_) <*> (many $ noneOf "\n") <* eol
+pCategory = Category <$>
+  (field "category" *> identifier_) <*>
+  (optional $ token "# old:" *> many1 (noneOf "\n"))
+  <* eol
 
 pVersion :: P Field
-pVersion = FVersion <$> (field "version" *> digit' <* char '.') <*> digit' <* eol
+pVersion = FVersion <$>
+  (field "version" *> digit' <* char '.') <*> digit' <* eol
 
 pGlxropcode :: P Field
-pGlxropcode = Glxropcode <$> (field "glxropcode" *> pGlxropcode') <* eol
-
-pGlxropcode' :: P Glxropcode
-pGlxropcode' =
-  Number <$> (read <$> many1 digit) <*> optional (identifier)
-  <|> QuestionMark <$ string "?"
+pGlxropcode = Glxropcode <$> (field "glxropcode" *> question) <* eol
 
 pOffset :: P Field
-pOffset = Offset <$> (field "offset" *> optional pOffset') <* eol
-
-pOffset' :: P Offset
-pOffset' = 
-  Number3 . read <$> many1 digit
-  <|> QuestionMark3 <$ string "?"
+pOffset = Offset <$> (field "offset" *> optional question) <* eol
 
 pWglflags :: P Field
-pWglflags = Wglflags <$> (field "wglflags" *> many (tag <* blanks)) <* eol
+pWglflags = Wglflags <$> (field "wglflags" *> many1 pWglflag) <* eol
+
+pWglflag :: P Wglflag
+pWglflag = choice
+  [ WglClientHandcode <$ string "client-handcode"
+  , try $ WglServerHandcode <$ string "server-handcode"
+  , WglSmallData <$ string "small-data"
+  , WglBatchable <$ string "batchable"
+  ] <* blanks
 
 pDlflags :: P Field
-pDlflags = Dlflags <$> (field "dlflags" *> tag) <* eol
+pDlflags = Dlflags <$> (field "dlflags" *> pDlflag) <* eol
+
+pDlflag :: P Dlflag
+pDlflag = choice
+  [ DlNotlistable <$ string "notlistable"
+  , DlHandcode <$ string "handcode"
+  ]
 
 pGlxflags :: P Field
 pGlxflags = Glxflags <$>
-  (field "glxflags" *> many (tag <* blanks)) <*>
-  optional (many $ noneOf "\n")
+  (field "glxflags" *> many pGlxflag) <*>
+  optional ( token "###" *> many pGlxflag)
   <* eol
 
-pGlxsingle :: P Field
-pGlxsingle = Glxsingle <$> (field "glxsingle" *> pGlxsingle') <* eol
+pGlxflag :: P Glxflag
+pGlxflag = choice
+  [ try $ GlxClientHandcode <$ string "client-handcode"
+  , GlxServerHandcode <$ string "server-handcode"
+  , GlxClientIntercept <$ string "client-intercept"
+  , GlxEXT <$ string "EXT"
+  , GlxSGI <$ string "SGI"
+  , GlxARB <$ string "ARB"
+  , GlxIgnore <$ string "ignore"
+  ] <* blanks
 
-pGlxsingle' :: P Glxsingle
-pGlxsingle' = 
-  Number2 . read <$> many1 digit
-  <|> QuestionMark2 <$ string "?"
+pGlxsingle :: P Field
+pGlxsingle = Glxsingle <$> (field "glxsingle" *> question) <* eol
 
 pDeprecated :: P Field
 pDeprecated = Deprecated <$>
@@ -606,19 +708,24 @@ pExtension =  FExtension <$> (field "extension" *> many identifier_) <* eol
 
 pGlxvendorpriv :: P Field
 pGlxvendorpriv =
-  Glxvendorpriv <$> (field "glxvendorpriv" *> pGlxvendorpriv') <* eol
+  Glxvendorpriv <$> (field "glxvendorpriv" *> question) <* eol
 
-pGlxvendorpriv' :: P Glxvendorpriv
-pGlxvendorpriv' = 
-  Number4 . read <$> many1 digit
-  <|> QuestionMark4 <$ string "?"
-
--- TODO Maybe instead of [] ?
 pGlfflags :: P Field
-pGlfflags = Glfflags <$> (field "glfflags" *> many (tag <* blanks)) <* eol
+pGlfflags = Glfflags <$> (field "glfflags" *> many1 pGlfflag) <* eol
+
+pGlfflag :: P Glfflag
+pGlfflag = choice
+  [ try $ GlfCaptureExecute <$ string "capture-execute"
+  , GlfCaptureHandcode <$ string "capture-handcode"
+  , GlfDecodeHandcode <$ string "decode-handcode"
+  , try $ GlfPixelPack <$ string "pixel-pack"
+  , GlfPixelUnpack <$ string "pixel-unpack"
+  , GlfGlEnum <$ string "gl-enum"
+  , GlfIgnore <$ string "ignore"
+  ] <* blanks
 
 pBeginend :: P Field
-pBeginend = Beginend <$> (field "beginend" *> many (tag <* blanks)) <* eol
+pBeginend = AllowInside <$ (field "beginend" *> string "allow-inside") <* eol
 
 pGlxvectorequiv :: P Field
 pGlxvectorequiv =
@@ -633,4 +740,10 @@ pSubcategory = Subcategory <$> (field "subcategory" *> identifier_) <* eol
 pGlextmask :: P Field
 pGlextmask =
   Glextmask <$> (field "glextmask" *> sepBy identifier (token "|")) <* eol
+
+go = do
+  r <- funLines <$> readFile "spec-files/opengl/gl.spec"
+  case r of
+    Right _ -> putStrLn "ok."
+    Left err -> putStrLn $ show err
 
