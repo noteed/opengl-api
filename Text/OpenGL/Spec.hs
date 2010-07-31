@@ -15,7 +15,7 @@ module Text.OpenGL.Spec (
   TmLine(..), TmType(..),
   tmLines, tmLine,
 
-  FunLine(..), Field(..),
+  FunLine(..), Prop(..),
   funLines, funLine
   ) where
 
@@ -424,21 +424,66 @@ pTmType = choice $ map try
 data FunLine =
     FComment String
   | FBlankLine
-  | Tag String [String] -- TODO this is called property, make a variant for each.
   | FPassthru String
+  | Property Property
+  | NewCategory Category
   | Function String [String]
-  | Field Field -- TODO this is called a property
+  | Prop Prop
   | At String
   deriving (Eq, Show)
 
--- TODO Rename into Property
-data Field =
+data Property =
+    RequiredProps
+  -- ^ Hardcoded counter part (empty)
+  | ParamProp
+  -- ^ Hardcoded counter part: retval retained, retval is not used
+  | DlflagsProp
+  -- ^ Hardcoded counter part: notlistable handcode
+  | GlxflagsProp
+  -- ^ Hardcoded counter part:
+  -- client-intercept client-handcode server-handcode EXT SGI ignore ARB
+  | VectorequivProp
+  -- ^ Hardcoded counter part: *
+  | CategoryProp [Category]
+  -- ^ Could have been hardcoded too, but there are many values.
+  | VersionProp [(Int,Int)]
+  -- ^ Could have been hardcoded too.
+  | DeprecatedProp [(Int,Int)]
+  -- ^ Could have been hardcoded too. Only 3.1 for now.
+  | GlxsingleProp
+  -- ^ Hardcoded counter part: *
+  | GlxropcodeProp
+  -- ^ Hardcoded counter part: *
+  | GlxvendorprivProp
+  -- ^ Hardcoded counter part: *
+  | WglflagsProp
+  -- ^ Hardcoded counter part:
+  -- client-handcode server-handcode small-data batchable
+  | ExtensionProp
+  -- ^ Hardcoded counter part:
+  -- future not_implemented soft WINSOFT NV10 NV20 NV50
+  | AliasProp
+  -- ^ Hardcoded counter part: *
+  | OffsetProp
+  -- ^ Hardcoded counter part: *
+  | GlfflagsProp
+  -- ^ Hardcoded counter part: *
+  | BeginendProp
+  -- ^ Hardcoded counter part: *
+  | GlxvectorequivProp
+  -- ^ Hardcoded counter part: *
+  | SubcategoryProp
+  -- ^ Hardcoded counter part: *
+  | GlextmaskProp
+  -- ^ Hardcoded counter part: *
+  deriving (Eq, Show)
+
+data Prop =
     Return ReturnType
   | Param String ParamType
   -- ^ This pairs the name of a parameter with its type.
-  | Category String (Maybe String)
-   -- ^ TODO The String should be specialized. The Maybe is a commented
-   -- old value.
+  | Category Category (Maybe Category)
+   -- ^ The Maybe is a commented old value.
   | Subcategory String
   | FVersion Int Int
   | Glxropcode Question
@@ -451,7 +496,7 @@ data Field =
   | Glxsingle Question
   | Deprecated Int Int
   -- ^ Only 3.1 for now.
-  | FExtension [String]
+  | FExtension [String] -- TODO use an enum
   | Glxvendorpriv Question
   | Glfflags [Glfflag]
   | AllowInside
@@ -466,6 +511,8 @@ data Field =
   | Alias String
   | Glextmask [String]
   deriving (Eq, Show)
+
+type Category = String -- TODO proper data type
 
 data ReturnType =
     Boolean
@@ -545,30 +592,67 @@ question =
   -- It is only used in the glxropcode of PointParameteriv, line 5108
   <|> Mark <$ string "?"
 
+version :: P (Int,Int)
+version = (,) <$> (digit' <* char '.') <*> digit'
+
 pFunLine :: P FunLine
 pFunLine = choice
   [ try (FComment <$> pComment)
   , try (FBlankLine <$ pBlankLine)
   , try pFPassthru
-  , try pTag
+  , try pProperty
+  , try pNewCategory
   , try pFunction
-  , try pField
+  , try pProp
   , pAt
   ]
 
 pFPassthru :: P FunLine
-pFPassthru = FPassthru <$> (string "passthru:" *> many (noneOf "\n") <* eol)
+pFPassthru = FPassthru <$> (string "passthru:" *> many (noneOf "\n")) <* eol
 
-pTag :: P FunLine
-pTag = Tag <$> (tag <* char ':' <* blanks) <*> many tagValue <* eol
+-- The hardcoded parser could directly use a single literal string instead
+-- of the repeated use of 'token'.
+pProperty :: P FunLine
+pProperty = Property <$> choice (map try
+  [ RequiredProps <$ string "required-props:"
+  , ParamProp <$ (token "param:" *> token "retval" *> string "retained")
+  , DlflagsProp <$ (token "dlflags:" *> token "notlistable" *>
+    string "handcode")
+  , GlxflagsProp <$ (token "glxflags:" *>
+    token "client-intercept" *> token "client-handcode" *>
+    token "server-handcode" *> token "EXT" *> token "SGI" *>
+    token "ignore" *> string "ARB")
+  , VectorequivProp <$ (token "vectorequiv:" *> string "*")
+  , CategoryProp <$> (token "category:" *> many (tag <* blanks))
+  , VersionProp <$> (token "version:" *> many (version <* blanks))
+  , DeprecatedProp <$> (token "deprecated:" *> many (version <* blanks))
+  , GlxsingleProp <$ (token "glxsingle:" *> string "*")
+  , GlxropcodeProp <$ (token "glxropcode:" *> string "*")
+  , GlxvendorprivProp <$ (token "glxvendorpriv:" *> string "*")
+  , WglflagsProp <$ (token "wglflags:" *> token "client-handcode" *>
+    token "server-handcode" *> token "small-data" *> string "batchable")
+  , ExtensionProp <$ (token "extension:" *> token "future" *>
+    token "not_implemented" *> token "soft" *> token "WINSOFT" *>
+    token "NV10" *> token "NV20" *> string "NV50")
+  , AliasProp <$ (token "alias:" *> string "*")
+  , OffsetProp <$ (token "offset:" *> string "*")
+  , GlfflagsProp <$ (token "glfflags:" *> string "*")
+  , BeginendProp <$ (token "beginend:" *> string "*")
+  , GlxvectorequivProp <$ (token "glxvectorequiv:" *> string "*")
+  , SubcategoryProp <$ (token "subcategory:" *> string "*")
+  , GlextmaskProp <$ (token "glextmask:" *> string "*")
+  ]) <* eol
+
+pNewCategory :: P FunLine
+pNewCategory = NewCategory <$> (token "newcategory:" *> identifier <*) eol
 
 pFunction :: P FunLine
 pFunction = Function <$>
   identifier <*> (char '(' *> sepBy identifier (token ",") <* char ')')
   <* eol
 
-pField :: P FunLine
-pField = Field <$> choice
+pProp :: P FunLine
+pProp = Prop <$> choice
   [ try pReturn
   , try pParam
   , try pCategory
@@ -594,7 +678,7 @@ pField = Field <$> choice
 pAt :: P FunLine
 pAt = At <$> (token "@@@" *> many (noneOf "\n")) <* eol
 
-pReturn :: P Field
+pReturn :: P Prop
 pReturn = Return <$> (field "return" *> pReturnType) <* eol
 
 pReturnType :: P ReturnType
@@ -614,7 +698,7 @@ pReturnType = choice
   , VoidPointer <$ string "VoidPointer"
   ]
 
-pParam :: P Field
+pParam :: P Prop
 pParam = Param <$>
   (field "param" *> identifier_) <*> pParamType <* eol
 
@@ -640,23 +724,23 @@ pValueOrArray = Value <$ string "value"
   <|>
   Reference <$ string "reference"
 
-pCategory :: P Field
+pCategory :: P Prop
 pCategory = Category <$>
   (field "category" *> identifier_) <*>
   (optional $ token "# old:" *> many1 (noneOf "\n"))
   <* eol
 
-pVersion :: P Field
+pVersion :: P Prop
 pVersion = FVersion <$>
   (field "version" *> digit' <* char '.') <*> digit' <* eol
 
-pGlxropcode :: P Field
+pGlxropcode :: P Prop
 pGlxropcode = Glxropcode <$> (field "glxropcode" *> question) <* eol
 
-pOffset :: P Field
+pOffset :: P Prop
 pOffset = Offset <$> (field "offset" *> optional question) <* eol
 
-pWglflags :: P Field
+pWglflags :: P Prop
 pWglflags = Wglflags <$> (field "wglflags" *> many1 pWglflag) <* eol
 
 pWglflag :: P Wglflag
@@ -667,7 +751,7 @@ pWglflag = choice
   , WglBatchable <$ string "batchable"
   ] <* blanks
 
-pDlflags :: P Field
+pDlflags :: P Prop
 pDlflags = Dlflags <$> (field "dlflags" *> pDlflag) <* eol
 
 pDlflag :: P Dlflag
@@ -676,7 +760,7 @@ pDlflag = choice
   , DlHandcode <$ string "handcode"
   ]
 
-pGlxflags :: P Field
+pGlxflags :: P Prop
 pGlxflags = Glxflags <$>
   (field "glxflags" *> many pGlxflag) <*>
   optional ( token "###" *> many pGlxflag)
@@ -693,24 +777,24 @@ pGlxflag = choice
   , GlxIgnore <$ string "ignore"
   ] <* blanks
 
-pGlxsingle :: P Field
+pGlxsingle :: P Prop
 pGlxsingle = Glxsingle <$> (field "glxsingle" *> question) <* eol
 
-pDeprecated :: P Field
+pDeprecated :: P Prop
 pDeprecated = Deprecated <$>
   (field "deprecated" *> digit' <* char '.') <*> digit' <* eol
 
-pVectorequiv :: P Field
+pVectorequiv :: P Prop
 pVectorequiv = Vectorequiv <$> (field "vectorequiv" *> identifier_) <* eol
 
-pExtension :: P Field
+pExtension :: P Prop
 pExtension =  FExtension <$> (field "extension" *> many identifier_) <* eol
 
-pGlxvendorpriv :: P Field
+pGlxvendorpriv :: P Prop
 pGlxvendorpriv =
   Glxvendorpriv <$> (field "glxvendorpriv" *> question) <* eol
 
-pGlfflags :: P Field
+pGlfflags :: P Prop
 pGlfflags = Glfflags <$> (field "glfflags" *> many1 pGlfflag) <* eol
 
 pGlfflag :: P Glfflag
@@ -724,20 +808,20 @@ pGlfflag = choice
   , GlfIgnore <$ string "ignore"
   ] <* blanks
 
-pBeginend :: P Field
+pBeginend :: P Prop
 pBeginend = AllowInside <$ (field "beginend" *> string "allow-inside") <* eol
 
-pGlxvectorequiv :: P Field
+pGlxvectorequiv :: P Prop
 pGlxvectorequiv =
   Glxvectorequiv <$> (field "glxvectorequiv" *> identifier_) <* eol
 
-pAlias :: P Field
+pAlias :: P Prop
 pAlias = Alias <$> (field "alias" *> identifier_) <* eol
 
-pSubcategory :: P Field
+pSubcategory :: P Prop
 pSubcategory = Subcategory <$> (field "subcategory" *> identifier_) <* eol
 
-pGlextmask :: P Field
+pGlextmask :: P Prop
 pGlextmask =
   Glextmask <$> (field "glextmask" *> sepBy identifier (token "|")) <* eol
 
