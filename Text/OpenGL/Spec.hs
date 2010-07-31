@@ -588,10 +588,6 @@ funLine = parse pFunLine "funLine"
 tag :: P String
 tag = many1 . oneOf $ "_-" ++ ['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z']
 
-tagValue :: P String
-tagValue = (many1 . oneOf $ "_-*." ++ ['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z'])
-  <* blanks
-
 field :: String -> P ()
 field s = () <$ (blanks1 >> token s)
 
@@ -843,6 +839,7 @@ pGlextmask :: P Prop
 pGlextmask =
   Glextmask <$> (field "glextmask" *> sepBy identifier (token "|")) <* eol
 
+go :: IO ()
 go = do
   r <- funLines <$> readFile "spec-files/opengl/gl.spec"
   case r of
