@@ -375,13 +375,13 @@ showFunction f = unlines $
 
 -- gl.tm
 
-type TypeMap = M.Map String TmType
+type TypeMap = M.Map String (TmType,Bool)
 
 mkTypeMap str = case Spec.tmLines str of
   Left err -> Left err
   Right xs -> Right $ foldr f M.empty xs
   where f (Spec.TmComment _) m = m
-        f (Spec.TmEntry x t) m = M.insert x t m
+        f (Spec.TmEntry x t b) m = M.insert x (t,b) m
 
 --
 
@@ -394,49 +394,41 @@ cDeclaration tm f = unwords
   , "(" ++ cParameters tm (funParameters f) ++ ");"
   ]
 
+-- TODO use the typeMap, which means maybe regroug ReturnType with the
+-- String to lookup the typemap.
 cReturnType t = case t of
   Spec.Void -> "void"
+  Spec.Boolean -> "GLboolean"
+  Spec.VoidPointer -> "GLvoid*"
+  Spec.UInt32 -> "GLuint"
+  Spec.Int32 -> "GLint"
+  Spec.String -> "const GLubyte *"
+  Spec.GLEnum -> "GLenum"
+  Spec.HandleARB -> "GLhandleARB"
+  Spec.BufferOffset -> "GLintptr"
+  Spec.FramebufferStatus -> "GLenum"
   x -> show x
 
+cParameters tm [] = "void"
 cParameters tm p = concat . intersperse ", " $ map (cParameter tm) p
 
-cParameter tm (Parameter x t i p) = c ++ t' ++ f p ++ x
+cParameter tm (Parameter x t i p) = c ++ t' ++ x
   where
   t' = case M.lookup t tm of
     Nothing -> "Nothing"
-    Just a -> cType a
-  f Reference = " *"
-  f Value = " "
-  f (Array _ _) = " *"
-  c = case (t',p,i) of
-    ("GLvoid",Array _ _,True) -> "const "
-    ("GLvoid",Reference,True) -> "const "
-    ("GLfloat",Array _ _,True) -> "const "
-    ("GLfloat",Reference,True) -> "const "
-    ("GLint",Array _ _,True) -> "const "
-    ("GLint",Reference,True) -> "const "
+    Just (a,b) -> case p of
+      Value -> cType a ++ (if b then " *" else " ")
+      Array _ _ -> cType a ++ (if b then "* *" else " *")
+      Reference -> cType a ++ (if b then "* *" else " *")
+  c = case (p,i) of
+    (Array _ _,True) -> "const "
+    (Reference,True) -> "const "
     _ -> ""
 
 cType t = case t of
-  Star -> "Star"
-  GLboolean True -> "GLboolean *"
-  GLboolean False -> "GLboolean"
-  GLchar True -> "GLchar *"
-  GLchar False -> "GLchar"
-  GLcharARB True -> "GLcharARB *"
-  GLcharARB False -> "GLcharARB"
-  GLdouble True -> "GLdouble *"
-  GLdouble False -> "GLdouble"
-  GLfloat True -> "GLfloat *"
-  GLfloat False -> "GLfloat"
+  Star -> "void"
   UnderscoreGLfuncptr -> "_GLfuncptr"
-  ConstGLubyteStar -> "const GLubyte *"
-  GLUnurbsStar -> "GLUnurbs *"
-  GLUquadricStar -> "GLUquadric *"
-  GLUtesselatorStar -> "GLUtesselator *"
-  GLvoid True -> "GLvoid *"
-  GLvoid False -> "GLvoid"
-  GLvoidStarConst -> "GLvoid * const"
+  GLvoidStarConst -> "GLvoid* const"
   x -> show x
 
 --
@@ -463,6 +455,34 @@ typeMap = unsafePerformIO $ do
 glextHeader12 = declarationsFor $ Spec.Version 1 2 False
 
 glextHeader12Deprecated = declarationsFor $ Spec.Version 1 2 True
+
+glextHeader13 = declarationsFor $ Spec.Version 1 3 False
+
+glextHeader13Deprecated = declarationsFor $ Spec.Version 1 3 True
+
+glextHeader14 = declarationsFor $ Spec.Version 1 4 False
+
+glextHeader14Deprecated = declarationsFor $ Spec.Version 1 4 True
+
+glextHeader15 = declarationsFor $ Spec.Version 1 5 False
+
+glextHeader20 = declarationsFor $ Spec.Version 2 0 False
+
+glextHeader21 = declarationsFor $ Spec.Version 2 1 False
+
+glextHeader30 = declarationsFor $ Spec.Version 3 0 False
+
+glextHeader31 = declarationsFor $ Spec.Version 3 1 False
+
+glextHeader32 = declarationsFor $ Spec.Version 3 2 False
+
+glextHeaderAll = unlines . map (cDeclaration typeMap) $
+  filter g functions
+  where
+  g f = case funCategory f of
+    Spec.Version 1 0 _ -> False
+    Spec.Version 1 1 _ -> False
+    _ -> True
 
 declarationsFor c = unlines . map (cDeclaration typeMap) $
   functions `withCategory` c

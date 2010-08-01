@@ -326,24 +326,23 @@ reparse fn = do
 
 data TmLine =
     TmComment String
-  | TmEntry String TmType
+  | TmEntry String TmType Bool
+  -- The boolean is used for the presence or not of a *.
   deriving (Eq, Show)
 
--- - The boolean is used for the presence or not of a *.
--- - The suffix Star is used when the * is always present.
 data TmType =
     Star -- for void
   | GLbitfield
-  | GLboolean Bool
+  | GLboolean
   | GLbyte
-  | GLchar Bool
-  | GLcharARB Bool
+  | GLchar
+  | GLcharARB
   | GLclampd
   | GLclampf
-  | GLdouble Bool
+  | GLdouble
   | GLenum
 --  | GLenumWithTrailingComma -- removed from the source
-  | GLfloat Bool
+  | GLfloat
   | UnderscoreGLfuncptr
   | GLhalfNV
   | GLhandleARB
@@ -358,15 +357,15 @@ data TmType =
   | GLsizeiptrARB
   | GLsync
   | GLubyte
-  | ConstGLubyteStar
+  | ConstGLubyte
   | GLuint
   | GLuint64
   | GLuint64EXT
-  | GLUnurbsStar
-  | GLUquadricStar
+  | GLUnurbs
+  | GLUquadric
   | GLushort
-  | GLUtesselatorStar
-  | GLvoid Bool
+  | GLUtesselator
+  | GLvoid
   | GLvoidStarConst
   deriving (Eq, Read, Show)
 
@@ -391,25 +390,25 @@ pTmLine = choice
 
 pTmEntry :: P TmLine
 pTmEntry = TmEntry <$>
-  (identifier <* token ",*,*,") <*> pTmType
-  <* (string ",*,*" >> opt ",") -- ignore trailing comma after GLenum line.
+  (identifier <* token ",*,*,") <*> pTmType <*> opt "*"
+  <* (string ",*,*" >> opt ",") -- ignore trailing comma after GLenum line, and sync.
   <* eol
 
 pTmType :: P TmType
 pTmType = choice $ map try
   [ Star <$ string "*"
-  , ConstGLubyteStar <$ string "const GLubyte *"
-  , UnderscoreGLfuncptr <$ string "_GLfuncptr"
-  , GLvoidStarConst <$ string "GLvoid* const"
-  , GLboolean <$> (string "GLboolean" *> opt "*")
-  , GLcharARB <$> (string "GLcharARB" *> opt "*")
-  , GLchar <$> (string "GLchar" *> opt "*")
-  , GLdouble <$> (string "GLdouble" *> opt "*")
-  , GLfloat <$> (string "GLfloat" *> opt "*")
-  , GLvoid <$> (string "GLvoid" *> opt "*")
-  , GLUnurbsStar <$ string "GLUnurbs*"
-  , GLUquadricStar <$ string "GLUquadric*"
-  , GLUtesselatorStar <$ string "GLUtesselator*"
+  , ConstGLubyte <$ token "const GLubyte"
+  , UnderscoreGLfuncptr <$ token "_GLfuncptr"
+  , GLvoidStarConst <$ token "GLvoid* const"
+  , GLboolean <$ token "GLboolean"
+  , GLcharARB <$ token "GLcharARB"
+  , GLchar <$ token "GLchar"
+  , GLdouble <$ token "GLdouble"
+  , GLfloat <$ token "GLfloat"
+  , GLvoid <$ token "GLvoid"
+  , GLUnurbs <$ token "GLUnurbs"
+  , GLUquadric <$ token "GLUquadric"
+  , GLUtesselator <$ token "GLUtesselator"
   , read <$> identifier
   ]
 
