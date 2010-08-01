@@ -385,9 +385,6 @@ mkTypeMap str = case Spec.tmLines str of
 
 --
 
-glextHeader12 = unlines . map (cDeclaration typeMap) $
-  functions `withCategory` Spec.Version 1 2 False
-
 cDeclaration :: TypeMap -> Function -> String
 cDeclaration tm f = unwords
   [ "GLAPI"
@@ -403,7 +400,7 @@ cReturnType t = case t of
 
 cParameters tm p = concat . intersperse ", " $ map (cParameter tm) p
 
-cParameter tm (Parameter x t _ p) = c ++ t' ++ f p ++ x
+cParameter tm (Parameter x t i p) = c ++ t' ++ f p ++ x
   where
   t' = case M.lookup t tm of
     Nothing -> "Nothing"
@@ -411,8 +408,13 @@ cParameter tm (Parameter x t _ p) = c ++ t' ++ f p ++ x
   f Reference = " *"
   f Value = " "
   f (Array _ _) = " *"
-  c = case (t',p) of
-    ("GLvoid",Array _ _) -> "const "
+  c = case (t',p,i) of
+    ("GLvoid",Array _ _,True) -> "const "
+    ("GLvoid",Reference,True) -> "const "
+    ("GLfloat",Array _ _,True) -> "const "
+    ("GLfloat",Reference,True) -> "const "
+    ("GLint",Array _ _,True) -> "const "
+    ("GLint",Reference,True) -> "const "
     _ -> ""
 
 cType t = case t of
@@ -448,6 +450,8 @@ withCategory fs c = filter ((== c) . funCategory) fs
 
 withName fs n = filter ((== n) . funName) fs
 
+-- unsafe read data, for convenience during develoment
+
 functions = unsafePerformIO $ extractFunctions' "spec-files/opengl/gl.spec"
 
 typeMap = unsafePerformIO $ do
@@ -455,3 +459,11 @@ typeMap = unsafePerformIO $ do
   case mkTypeMap ls of
     Left err -> putStrLn (show err) >> return M.empty
     Right a -> return a
+
+glextHeader12 = declarationsFor $ Spec.Version 1 2 False
+
+glextHeader12Deprecated = declarationsFor $ Spec.Version 1 2 True
+
+declarationsFor c = unlines . map (cDeclaration typeMap) $
+  functions `withCategory` c
+
