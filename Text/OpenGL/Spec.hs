@@ -15,7 +15,9 @@ module Text.OpenGL.Spec (
   TmLine(..), TmType(..),
   tmLines, tmLine,
 
-  FunLine(..), Prop(..),
+  FunLine(..), Prop(..), ReturnType(..), ParamType(..), Passing(..),
+  Category(..), Question(..), Wglflag(..), Dlflag(..), Glxflag(..),
+  FExtension(..), Glfflag(..),
   funLines, funLine
   ) where
 
