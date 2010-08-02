@@ -18,7 +18,9 @@ module Text.OpenGL.Spec (
   FunLine(..), Prop(..), ReturnType(..), ParamType(..), Passing(..),
   Category(..), Question(..), Wglflag(..), Dlflag(..), Glxflag(..),
   FExtension(..), Glfflag(..),
-  funLines, funLine
+  funLines, funLine,
+
+  showExtension
   ) where
 
 import Numeric (readHex, showHex)

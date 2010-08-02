@@ -1,8 +1,10 @@
 module Text.OpenGL.Api where
 
 import Control.Applicative ((<$>))
-import Data.List (find, intersperse, partition)
+import Data.List (find, groupBy, intersperse, partition)
+import Data.Char (toUpper)
 import qualified Data.Map as M
+import Data.Function (on)
 
 import System.IO.Unsafe (unsafePerformIO)
 
@@ -101,6 +103,70 @@ extractFunctions_ xs = go y ys
     in case r of
       (fun2:rest) -> (a,b,map e props) : go fun2 rest
       [] -> [(a,b,map e props)]
+
+data HeaderItem =
+    HPassthru String
+  | HNewCategory Category
+  | HFunctions [Function]
+  deriving Show
+
+showHeaderItem tm i = case i of
+  HPassthru [] -> [""]
+  HPassthru (_:str) -> [str]
+  HNewCategory c ->
+    [ "#ifndef GL_" ++ cCategory c
+    , "#define GL_" ++ cCategory c ++ " 1"
+    , "#endif",""
+    ]
+  HFunctions fs ->
+    [ "#ifndef GL_" ++ cCategory (funCategory $ head fs)
+    , "#define GL_" ++ cCategory (funCategory $ head fs) ++ " 1"
+    , "#ifdef GL_GLEXT_PROTOTYPES"
+    ] ++ map (cDeclaration tm) fs ++
+    [ "#endif /* GL_GLEXT_PROTOTYPES */"
+    ] ++ map (cDeclaration' tm) fs ++
+    [ "#endif", ""
+    ]
+
+cCategory c = case c of
+  Spec.Version i j b -> "VERSION_" ++ show i ++ "_" ++ show j ++
+    if b then "_DEPRECATED" else ""
+  Spec.Extension e s b -> Spec.showExtension e ++ "_" ++ s ++
+    if b then "_DEPRECATED" else ""
+  Spec.Name s -> s
+
+extractHeaderItems :: [Spec.FunLine] -> [HeaderItem]
+extractHeaderItems [] = []
+extractHeaderItems xs = go [] xs
+  where
+  g (Spec.Prop _) = False
+  g _ = True
+  e (Spec.Prop p) = p
+  go [] (Spec.FPassthru str : zs) =
+    HPassthru str : go [] zs
+  go [] (Spec.NewCategory c : zs) =
+    HNewCategory c : go [] zs
+  go fs (Spec.FPassthru str : zs) =
+    HFunctions (reverse fs) : HPassthru str : go [] zs
+  go fs (Spec.NewCategory c : zs) =
+    HFunctions (reverse fs) : HNewCategory c : go [] zs
+  go fs (Spec.Function a b : zs) =
+    let (props,r) = break g zs
+        f = mkFunction a b $ map e props
+        newf = case fs of
+          [] -> False
+          (x:_) -> funCategory x /= funCategory f
+    in if hasHeaderCategory f
+       then if newf then HFunctions (reverse fs) : go [f] r else go (f:fs) r
+       else go fs r
+  go fs (z:zs) = go fs zs
+  go [] [] = []
+  go fs [] = [HFunctions fs]
+
+hasHeaderCategory f = case funCategory f of
+  Spec.Version 1 0 _ -> False
+  Spec.Version 1 1 _ -> False
+  _ -> True
 
 extractFunctions :: [Spec.FunLine] -> [Function]
 extractFunctions = map (\(a,b,c) -> mkFunction a b c) . extractFunctions_
@@ -394,6 +460,14 @@ cDeclaration tm f = unwords
   , "(" ++ cParameters tm (funParameters f) ++ ");"
   ]
 
+cDeclaration' :: TypeMap -> Function -> String
+cDeclaration' tm f = unwords
+  [ "typedef"
+  , cReturnType (funReturnType f)
+  , "(APIENTRYP PFNGL" ++ map toUpper (funName f) ++ "PROC)"
+  , "(" ++ cParameters tm (funParameters f) ++ ");"
+  ]
+
 -- TODO use the typeMap, which means maybe regroug ReturnType with the
 -- String to lookup the typemap.
 cReturnType t = case t of
@@ -407,6 +481,7 @@ cReturnType t = case t of
   Spec.HandleARB -> "GLhandleARB"
   Spec.BufferOffset -> "GLintptr"
   Spec.FramebufferStatus -> "GLenum"
+  Spec.Sync -> "GLsync"
   x -> show x
 
 cParameters tm [] = "void"
@@ -452,6 +527,12 @@ typeMap = unsafePerformIO $ do
     Left err -> putStrLn (show err) >> return M.empty
     Right a -> return a
 
+headerItems = unsafePerformIO $ do
+  ls <- readFile "spec-files/opengl/gl.spec"
+  case Spec.funLines ls of
+    Left err -> putStrLn (show err) >> return []
+    Right a -> return $ extractHeaderItems a
+
 glextHeader12 = declarationsFor $ Spec.Version 1 2 False
 
 glextHeader12Deprecated = declarationsFor $ Spec.Version 1 2 True
@@ -476,8 +557,9 @@ glextHeader31 = declarationsFor $ Spec.Version 3 1 False
 
 glextHeader32 = declarationsFor $ Spec.Version 3 2 False
 
-glextHeaderAll = unlines . map (cDeclaration typeMap) $
-  filter g functions
+glextHeader12AndAbove = unlines $ map (cDeclaration typeMap) functions12AndAbove
+
+functions12AndAbove = filter g functions
   where
   g f = case funCategory f of
     Spec.Version 1 0 _ -> False
@@ -487,3 +569,6 @@ glextHeaderAll = unlines . map (cDeclaration typeMap) $
 declarationsFor c = unlines . map (cDeclaration typeMap) $
   functions `withCategory` c
 
+groupedFunctions12AndAbove = groupBy ((==) `on` funCategory) functions12AndAbove
+
+glextHeader = unlines $ concatMap (showHeaderItem typeMap) headerItems
