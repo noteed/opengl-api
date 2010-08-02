@@ -1,7 +1,7 @@
 module Text.OpenGL.Api where
 
 import Control.Applicative ((<$>))
-import Data.List (find, groupBy, intersperse, partition)
+import Data.List (find, groupBy, intersperse, nubBy, partition)
 import Data.Char (toUpper)
 import qualified Data.Map as M
 import Data.Function (on)
@@ -106,22 +106,24 @@ extractFunctions_ xs = go y ys
 
 data HeaderItem =
     HPassthru String
-  | HNewCategory Category
-  | HFunctions [Function]
+  | HNewCategory Category [String]
+  | HFunctions [Function] [String]
   deriving Show
 
 showHeaderItem tm i = case i of
   HPassthru [] -> [""]
   HPassthru (_:str) -> [str]
-  HNewCategory c ->
+  HNewCategory c ss ->
     [ "#ifndef GL_" ++ cCategory c
     , "#define GL_" ++ cCategory c ++ " 1"
-    , "#endif",""
+    ] ++ map (drop 1) ss ++
+    [ "#endif",""
     ]
-  HFunctions fs ->
+  HFunctions fs ss ->
     [ "#ifndef GL_" ++ cCategory (funCategory $ head fs)
     , "#define GL_" ++ cCategory (funCategory $ head fs) ++ " 1"
-    , "#ifdef GL_GLEXT_PROTOTYPES"
+    ] ++ map (drop 1) ss ++
+    [ "#ifdef GL_GLEXT_PROTOTYPES"
     ] ++ map (cDeclaration tm) fs ++
     [ "#endif /* GL_GLEXT_PROTOTYPES */"
     ] ++ map (cDeclaration' tm) fs ++
@@ -137,31 +139,50 @@ cCategory c = case c of
 
 extractHeaderItems :: [Spec.FunLine] -> [HeaderItem]
 extractHeaderItems [] = []
-extractHeaderItems xs = go [] xs
+extractHeaderItems xs = go xs
   where
   g (Spec.Prop _) = False
   g _ = True
   e (Spec.Prop p) = p
-  go [] (Spec.FPassthru str : zs) =
-    HPassthru str : go [] zs
-  go [] (Spec.NewCategory c : zs) =
-    HNewCategory c : go [] zs
-  go fs (Spec.FPassthru str : zs) =
-    HFunctions (reverse fs) : HPassthru str : go [] zs
-  go fs (Spec.NewCategory c : zs) =
-    HFunctions (reverse fs) : HNewCategory c : go [] zs
-  go fs (Spec.Function a b : zs) =
+  go (Spec.FPassthru str : zs) =
+    HPassthru str : go zs
+  go (Spec.NewCategory c : zs) =
+    goC (HNewCategory c []) zs
+  go (Spec.Function a b : zs) =
+    let (props,r) = break g zs
+        f = mkFunction a b $ map e props
+    in if hasHeaderCategory f
+       then goF (HFunctions [f] []) r
+       else go r
+  go (z:zs) = go zs
+  go [] = []
+  goC (HNewCategory c ps) (Spec.FPassthru str : zs) =
+    goC (HNewCategory c (ps++[str])) zs
+  goC (HNewCategory c ps) (Spec.NewCategory c' : zs) =
+    HNewCategory c ps : goC (HNewCategory c' []) zs
+  goC (HNewCategory c ps) (Spec.Function a b : zs) =
+    let (props,r) = break g zs
+        f = mkFunction a b $ map e props
+    in if hasHeaderCategory f
+          then HNewCategory c ps : goF (HFunctions [f] []) r
+          else goC (HNewCategory c ps) r
+  goC c (z:zs) = goC c zs
+  goC c [] = [c]
+  goF (HFunctions fs ps) (Spec.FPassthru str : zs) =
+    goF (HFunctions fs (ps++[str])) zs
+  goF fs (Spec.NewCategory c' : zs) =
+    fs : goC (HNewCategory c' []) zs
+  goF (HFunctions fs ps) (Spec.Function a b : zs) =
     let (props,r) = break g zs
         f = mkFunction a b $ map e props
         newf = case fs of
           [] -> False
-          (x:_) -> funCategory x /= funCategory f
-    in if hasHeaderCategory f
-       then if newf then HFunctions (reverse fs) : go [f] r else go (f:fs) r
-       else go fs r
-  go fs (z:zs) = go fs zs
-  go [] [] = []
-  go fs [] = [HFunctions fs]
+          (f':_) -> funCategory f /= funCategory f'
+    in if newf
+       then HFunctions fs ps : goF (HFunctions [f] []) r
+       else goF (HFunctions (fs++[f]) ps) r
+  goF fs (z:zs) = goF fs zs
+  goF fs [] = [fs]
 
 hasHeaderCategory f = case funCategory f of
   Spec.Version 1 0 _ -> False
@@ -571,4 +592,19 @@ declarationsFor c = unlines . map (cDeclaration typeMap) $
 
 groupedFunctions12AndAbove = groupBy ((==) `on` funCategory) functions12AndAbove
 
-glextHeader = unlines $ concatMap (showHeaderItem typeMap) headerItems
+glextHeader = unlines $ concatMap (showHeaderItem typeMap) hi
+  where
+  hi = rewrite $ nubBy f headerItems
+  -- The "newcategory: NV_fragment_program" is unecessary as some functions
+  -- have that category.
+  rewrite (HNewCategory
+    (Spec.Extension Spec.NV "fragment_program" False) [p] : 
+    HFunctions fs ps :
+    ys) = HFunctions fs (p:ps) : rewrite ys
+  rewrite (x:xs) = x : rewrite xs
+  rewrite [] = []
+  -- The "newcategory: MESA_ycbcr_texture" is present twice
+  f (HNewCategory (Spec.Extension Spec.MESA "ycbcr_texture" False) [])
+    (HNewCategory (Spec.Extension Spec.MESA "ycbcr_texture" False ) []) = True
+  f a b = False
+
