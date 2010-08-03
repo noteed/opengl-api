@@ -20,7 +20,8 @@ module Text.OpenGL.Spec (
   FExtension(..), Glfflag(..),
   funLines, funLine,
 
-  showExtension
+  showExtension,
+  HexSuffix(..)
   ) where
 
 import Numeric (readHex, showHex)
@@ -71,7 +72,7 @@ data StartEnum =
   | Name String
   deriving (Eq, Show)
 
-data Value = Hex Integer (Maybe HexSuffix) | Deci Int | Identifier String
+data Value = Hex Integer Int (Maybe HexSuffix) | Deci Int | Identifier String
   deriving (Eq, Show)
 
 data HexSuffix = U | Ull
@@ -154,11 +155,14 @@ identifier_ :: P String
 identifier_ = identifier <* blanks
 
 value :: P Value
-value = Hex . fst . head . readHex <$>
-   try (string "0x" *> many1 hexDigit) <*>
-   hexSuffix
+value = pHex
   <|> Deci . read <$> many1 digit
   <|> Identifier <$> identifier
+
+pHex = h <$>
+   try (string "0x" *> many1 hexDigit) <*>
+   hexSuffix
+  where h s = Hex (fst . head $ readHex s) (length s)
 
 opt :: String -> P Bool
 opt s = maybe False (const True) <$> optional (string s)
@@ -283,14 +287,14 @@ showStartEnum se = case se of
 
 showValue :: Value -> String
 showValue v = case v of
-  Hex i Nothing -> "0x" ++ showHex' i
-  Hex i (Just U) -> "0x" ++ showHex' i ++ "u"
-  Hex i (Just Ull) -> "0x" ++ showHex' i ++ "ull"
+  Hex i l Nothing -> "0x" ++ showHex' l i
+  Hex i l (Just U) -> "0x" ++ showHex' l i ++ "u"
+  Hex i l (Just Ull) -> "0x" ++ showHex' l i ++ "ull"
   Deci i -> show i
   Identifier x -> x
 
-showHex' :: Integral a => a -> String
-showHex' i = replicate (4 - length h) '0' ++ h
+showHex' :: Integral a => Int -> a -> String
+showHex' l i = replicate (l - length h) '0' ++ h
   where h = map toUpper (showHex i "")
 
 showExtension :: Extension -> String

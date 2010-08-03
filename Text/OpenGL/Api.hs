@@ -5,11 +5,13 @@ import Data.List (find, groupBy, intersperse, nubBy, partition)
 import Data.Char (toUpper)
 import qualified Data.Map as M
 import Data.Function (on)
+import Numeric (showHex)
 
 import System.IO.Unsafe (unsafePerformIO)
 
 import qualified Text.OpenGL.Spec as Spec
 import Text.OpenGL.Spec (
+  Value,
   ReturnType, ParamType, Passing, Category, Question, Wglflag, Dlflag,
   Glxflag, FExtension, Glfflag,
   TmType(..), Passing(..))
@@ -106,8 +108,8 @@ extractFunctions_ xs = go y ys
 
 data HeaderItem =
     HPassthru String
-  | HNewCategory Category [String]
-  | HFunctions [Function] [String]
+  | HNewCategory Category [String] -- The strings are passthru lines
+  | HFunctions [Function] [String] -- idem
   deriving Show
 
 showHeaderItem tm i = case i of
@@ -554,47 +556,49 @@ headerItems = unsafePerformIO $ do
     Left err -> putStrLn (show err) >> return []
     Right a -> return $ extractHeaderItems a
 
-glextHeader12 = declarationsFor $ Spec.Version 1 2 False
-
-glextHeader12Deprecated = declarationsFor $ Spec.Version 1 2 True
-
-glextHeader13 = declarationsFor $ Spec.Version 1 3 False
-
-glextHeader13Deprecated = declarationsFor $ Spec.Version 1 3 True
-
-glextHeader14 = declarationsFor $ Spec.Version 1 4 False
-
-glextHeader14Deprecated = declarationsFor $ Spec.Version 1 4 True
-
-glextHeader15 = declarationsFor $ Spec.Version 1 5 False
-
-glextHeader20 = declarationsFor $ Spec.Version 2 0 False
-
-glextHeader21 = declarationsFor $ Spec.Version 2 1 False
-
-glextHeader30 = declarationsFor $ Spec.Version 3 0 False
-
-glextHeader31 = declarationsFor $ Spec.Version 3 1 False
-
-glextHeader32 = declarationsFor $ Spec.Version 3 2 False
-
-glextHeader12AndAbove = unlines $ map (cDeclaration typeMap) functions12AndAbove
-
-functions12AndAbove = filter g functions
+glextHeader = unlines $
+  [ "#ifndef __glext_h_"
+  , "#define __glext_h_"
+  , ""
+  , "#ifdef __cplusplus"
+  , "extern \"C\" {"
+  , "#endif"
+  , ""
+  , "/* Header file version number, required by OpenGL ABI for Linux */"
+  , "/* This glext.h file was auto-generated from the spec files. */"
+  , "/* Current version at http://www.opengl.org/registry/ */"
+  , "#define GL_GLEXT_VERSION " ++ show glextVersion
+  , "/* Function declaration macros - to move into glplatform.h */"
+  , ""
+  , "#if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)"
+  , "#define WIN32_LEAN_AND_MEAN 1"
+  , "#include <windows.h>"
+  , "#endif"
+  , ""
+  , "#ifndef APIENTRY"
+  , "#define APIENTRY"
+  , "#endif"
+  , "#ifndef APIENTRYP"
+  , "#define APIENTRYP APIENTRY *"
+  , "#endif"
+  , "#ifndef GLAPI"
+  , "#define GLAPI extern"
+  , "#endif"
+  , ""
+  , "/*************************************************************/"
+  , ""
+  ] ++
+  concatMap cEnumeration es ++
+  [ ""
+  , "/*************************************************************/"
+  , ""
+  ] ++
+  concatMap (showHeaderItem typeMap) hi ++
+  glextEnding
   where
-  g f = case funCategory f of
-    Spec.Version 1 0 _ -> False
-    Spec.Version 1 1 _ -> False
-    _ -> True
-
-declarationsFor c = unlines . map (cDeclaration typeMap) $
-  functions `withCategory` c
-
-groupedFunctions12AndAbove = groupBy ((==) `on` funCategory) functions12AndAbove
-
-glextHeader = unlines $ concatMap (showHeaderItem typeMap) hi
-  where
+  glextVersion = 63
   hi = rewrite $ nubBy f headerItems
+  es = map g . filter hasHeaderCategory' $ groupEnums enums
   -- The "newcategory: NV_fragment_program" is unecessary as some functions
   -- have that category.
   rewrite (HNewCategory
@@ -603,8 +607,98 @@ glextHeader = unlines $ concatMap (showHeaderItem typeMap) hi
     ys) = HFunctions fs (p:ps) : rewrite ys
   rewrite (x:xs) = x : rewrite xs
   rewrite [] = []
-  -- The "newcategory: MESA_ycbcr_texture" is present twice
+  -- The "newcategory: MESA_ycbcr_texture" is present twice.
   f (HNewCategory (Spec.Extension Spec.MESA "ycbcr_texture" False) [])
     (HNewCategory (Spec.Extension Spec.MESA "ycbcr_texture" False ) []) = True
   f a b = False
+  -- The "SGIX_ycrcb_subsample" has no enum in the original glext.h.
+  -- The enum "2X_BIT_ATI" is present twice.
+  g (Enumeration v@(Spec.Extension Spec.SGIX "ycrcb_subsample" False) _) =
+    Enumeration v []
+  g (Enumeration c es) = Enumeration c $ nubBy g' es
+  g e = e
+  g' (EEnum "2X_BIT_ATI" _) (EEnum "2X_BIT_ATI" _) = True
+  g' _ _ = False
+
+glextEnding =
+  [ ""
+  , "#ifdef __cplusplus"
+  , "}"
+  , "#endif"
+  , ""
+  , "#endif"
+  ]
+
+--
+
+enums = unsafePerformIO $ do
+  r <- Spec.enumLines <$> readFile "spec-files/opengl/enumext.spec"
+  case r of
+    Left err -> putStrLn (show err) >> return []
+    Right a -> return a
+
+data Enumeration =
+    Enumeration Category [E]
+  | EPassthru String
+  deriving Show
+
+data E =
+    EEnum String Value
+  | EPassthru' String
+  | EUse String String
+  deriving Show
+
+hasHeaderCategory' (Enumeration c _) = case c of
+  Spec.Version 1 0 _ -> False
+  Spec.Version 1 1 _ -> False
+  _ -> True
+hasHeaderCategory' _ = True
+
+cEnumeration e = case e of
+  Enumeration c es ->
+    [ "#ifndef GL_" ++ cCategory c
+    ] ++ map cE es ++
+    [ "#endif"
+    , ""
+    ]
+  EPassthru str -> [str]
+
+cE e = case e of
+  EEnum a b -> "#define GL_" ++ a ++ pad a ++ " " ++ showValue b
+  EPassthru' str -> "/* " ++ str ++ "*/"
+  EUse _ b -> "/* reuse GL_" ++ b ++ " */"
+
+pad s = replicate (30 - length s) ' '
+
+showValue :: Value -> String
+showValue v = case v of
+  Spec.Hex i l Nothing -> "0x" ++ showHex' l i
+  Spec.Hex i l (Just Spec.U) -> "0x" ++ showHex' l i ++ "u"
+  Spec.Hex i l (Just Spec.Ull) -> "0x" ++ showHex' l i ++ "ull"
+  Spec.Deci i -> show i
+  Spec.Identifier x -> x
+
+showHex' :: Integral a => Int -> a -> String
+showHex' l i = replicate (l - length h) '0' ++ h
+  where h = map toUpper (showHex i "")
+
+groupEnums xs = go xs
+  where
+  go (Spec.Comment _ : zs) = go zs
+  go (Spec.BlankLine : zs) = go zs
+  go (Spec.Start se _ : zs) = goS (Enumeration se []) zs
+  go (Spec.Passthru str : zs) = EPassthru str : go zs
+  go (Spec.Enum _ _ _ : _) = error "encoutering an Enum before a Start"
+  go (Spec.Use _ _ : _) = error "encoutering a Use before a Start"
+  go [] = []
+  goS e (Spec.Comment _ : zs) = goS e zs
+  goS e (Spec.BlankLine : zs) = goS e zs
+  goS e (Spec.Start se _ : zs) = e : goS (Enumeration se []) zs
+  goS (Enumeration se es) (Spec.Passthru str : zs) =
+    goS (Enumeration se (es++[EPassthru' str])) zs
+  goS (Enumeration se es) (Spec.Enum a b _ : zs) =
+    goS (Enumeration se (es++[EEnum a b])) zs
+  goS (Enumeration se es) (Spec.Use a b : zs) =
+    goS (Enumeration se (es++[EUse a b])) zs
+  goS e [] = [e]
 
