@@ -1,3 +1,10 @@
+-- |
+-- This module uses Text.OpenGL.Spec to create a perfect replica of the
+-- glext.h file given by opengl.org from the spec files.
+-- To do this, it defines its own intermediate data structures (instead
+-- of using the one provided by Text.OpenGL.Api). This is necessary as
+-- the passthru lines get output to the glext.h file (the representation
+-- used in Text.OpenGL.Api drops those lines).
 module Text.OpenGL.ExtHeader where
 
 import Data.List (intersperse, nubBy)
@@ -14,10 +21,11 @@ type Enumerants = [(Category, [Enumerant])]
 
 data Enumerant =
     Define String Value
-  | EPassthru' String
+  | EPassthru String
   | EUse String String
   deriving Show
 
+-- Maybe the Category and [Function] can be grouped together.
 data HeaderItem =
     HPassthru String
   | HNewCategory Category [String] -- The strings are passthru lines
@@ -125,7 +133,7 @@ cEnumeration e = case e of
 cE :: Enumerant -> String
 cE e = case e of
   Define a b -> "#define GL_" ++ a ++ pad a ++ " " ++ showValue b
-  EPassthru' str -> "/* " ++ str ++ "*/"
+  EPassthru str -> "/* " ++ str ++ "*/"
   EUse _ b -> "/* reuse GL_" ++ b ++ " */"
 
 pad :: String -> String
@@ -158,7 +166,7 @@ groupEnums xs = go xs
   goS e (Spec.BlankLine : zs) = goS e zs
   goS e (Spec.Start se _ : zs) = e : goS (se, []) zs
   goS (se, es) (Spec.Passthru str : zs) =
-    goS (se, (es++[EPassthru' str])) zs
+    goS (se, (es++[EPassthru str])) zs
   goS (se, es) (Spec.Enum a b _ : zs) =
     goS (se, (es++[Define a b])) zs
   goS (se, es) (Spec.Use a b : zs) =
