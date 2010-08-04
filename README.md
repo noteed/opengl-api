@@ -4,6 +4,16 @@ Represent and parse spec files from the OpenGL [registry][].
 
 [registry]: http://www.opengl.org/registry/#specfiles
 
+## Directory layout
+
+- `spec-files` contains the `.spec` and `.tm` files provided by [opengl.org][].
+- `results` contains modified `glext.h` file. This is a `glext.h` header
+  provided by [opengl.org][] with one line modified (the one with the last
+  update date). It is used to ensure that opengl-api still generated the same
+  results after refactoring.
+
+[opengl.org]: http://www.opengl.org/registry/#specfiles
+
 ## Current state
 
 `Text.OpenGL.Spec.hs` has code to completely parse and represent the content of

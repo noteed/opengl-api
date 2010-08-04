@@ -1,0 +1,20 @@
+3099a3100,3104
+> #define GL_PACK_SUBSAMPLE_RATE_SGIX       0x85A0
+> #define GL_UNPACK_SUBSAMPLE_RATE_SGIX     0x85A1
+> #define GL_PIXEL_SUBSAMPLE_4444_SGIX      0x85A2
+> #define GL_PIXEL_SUBSAMPLE_2424_SGIX      0x85A3
+> #define GL_PIXEL_SUBSAMPLE_4242_SGIX      0x85A4
+3562a3568
+> #define GL_2X_BIT_ATI                     0x00000001
+8867a8874,8877
+> #endif
+> 
+> #ifndef GL_NV_fragment_program
+> #define GL_NV_fragment_program 1
+9073a9084,9087
+> #ifndef GL_MESA_ycbcr_texture
+> #define GL_MESA_ycbcr_texture 1
+> #endif
+> 
+10299a10314
+> 

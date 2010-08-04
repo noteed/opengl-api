@@ -16,10 +16,23 @@ Source-repository head
   type: git
   location: git://github.com/noteed/opengl-api.git
 
+executable opengl-api
+  main-is:             opengl-api.hs
+
+  build-depends:       base >= 4 && < 5,
+                       parsec >= 3.1 && < 3.2,
+                       cmdargs >= 0.1 && < 0.2
+
+  ghc-options:         -Wall
+
 Library
-  Exposed-modules:     Text.OpenGL.Spec
+  Exposed-modules:     Text.OpenGL.Spec,
+                       Text.OpenGL.Api,
+                       Text.OpenGL.ExtHeader,
+                       Text.OpenGL.Checks
 
   Build-depends:       base >= 4 && < 5,
-                       parsec >= 3.1 && < 3.2
+                       parsec >= 3.1 && < 3.2,
+                       containers >= 0.3 && < 0.4
 
   ghc-options:         -Wall

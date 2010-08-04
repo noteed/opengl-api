@@ -21,7 +21,28 @@ module Text.OpenGL.Spec (
   funLines, funLine,
 
   showExtension,
-  HexSuffix(..)
+  HexSuffix(..),
+
+  isReturn,
+  isParam,
+  isCategory,
+  isSubcategory,
+  isFVersion,
+  isGlxropcode,
+  isOffset,
+  isWglflags,
+  isDlflags,
+  isGlxflags,
+  isGlxsingle,
+  isDeprecated,
+  isFExtension,
+  isGlxvendorpriv,
+  isGlfflags,
+  isAllowInside,
+  isVectorequiv,
+  isGlxvectorequiv,
+  isAlias,
+  isGlextmask
   ) where
 
 import Numeric (readHex, showHex)
@@ -846,10 +867,67 @@ pGlextmask :: P Prop
 pGlextmask =
   Glextmask <$> (field "glextmask" *> sepBy identifier (token "|")) <* eol
 
-go :: IO ()
-go = do
-  r <- funLines <$> readFile "spec-files/opengl/gl.spec"
-  case r of
-    Right _ -> putStrLn "ok."
-    Left err -> putStrLn $ show err
+----------------------------------------------------------------------
+-- Predicates
+----------------------------------------------------------------------
+
+isReturn (Return _) = True
+isReturn _ = False
+
+isParam (Param _ _) = True
+isParam _ = False
+
+isCategory (Category _ _) = True
+isCategory _ = False
+
+isSubcategory (Subcategory _) = True
+isSubcategory _ = False
+
+isFVersion (FVersion _ _) = True
+isFVersion _ = False
+
+isGlxropcode (Glxropcode _) = True
+isGlxropcode _ = False
+
+isOffset (Offset _) = True
+isOffset _ = False
+
+isWglflags (Wglflags _) = True
+isWglflags _ = False
+
+isDlflags (Dlflags _) = True
+isDlflags _ = False
+
+isGlxflags (Glxflags _ _) = True
+isGlxflags _ = False
+
+isGlxsingle (Glxsingle _) = True
+isGlxsingle _ = False
+
+isDeprecated (Deprecated _ _) = True
+isDeprecated _ = False
+
+isFExtension (FExtension _) = True
+isFExtension _ = False
+
+isGlxvendorpriv (Glxvendorpriv _) = True
+isGlxvendorpriv _ = False
+
+isGlfflags (Glfflags _) = True
+isGlfflags _ = False
+
+isAllowInside AllowInside = True
+isAllowInside _ = False
+
+isVectorequiv (Vectorequiv _) = True
+isVectorequiv _ = False
+
+isGlxvectorequiv (Glxvectorequiv _) = True
+isGlxvectorequiv _ = False
+
+isAlias (Alias _) = True
+isAlias _ = False
+
+isGlextmask (Glextmask _) = True
+isGlextmask _ = False
 
