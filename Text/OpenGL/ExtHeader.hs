@@ -53,7 +53,7 @@ cHeaderItem tm i = case i of
     [ "#endif", ""
     ]
 
-cCategory :: StartEnum -> String
+cCategory :: Category -> String
 cCategory c = case c of
   Spec.Version i j b -> "VERSION_" ++ show i ++ "_" ++ show j ++
     if b then "_DEPRECATED" else ""

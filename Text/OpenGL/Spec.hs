@@ -8,7 +8,7 @@
 -- There is also some code to print the result back to something
 -- close to the original representation, for checking purpose.
 module Text.OpenGL.Spec (
-  EnumLine(..), StartEnum(..), Value(..), Extension(..),
+  EnumLine(..), Category(..), Value(..), Extension(..),
   enumLines, enumLine,
   parseAndShow, reparse,
 
@@ -16,7 +16,7 @@ module Text.OpenGL.Spec (
   tmLines, tmLine,
 
   FunLine(..), Prop(..), ReturnType(..), ParamType(..), Passing(..),
-  Category(..), Question(..), Wglflag(..), Dlflag(..), Glxflag(..),
+  Question(..), Wglflag(..), Dlflag(..), Glxflag(..),
   FExtension(..), Glfflag(..),
   funLines, funLine,
 
@@ -72,7 +72,7 @@ data EnumLine =
   -- ^ A comment on its own line, beginning with #.
   | BlankLine
   -- ^ A single blanck line.
-  | Start StartEnum (Maybe String)
+  | Start Category (Maybe String)
   -- ^ The beginning of an enumeration.
   | Passthru String
   -- ^ A passthru line with its comment.
@@ -84,8 +84,7 @@ data EnumLine =
 
 -- | The different ways to start an enumeration.
 
--- TODO find a better name; it is used for Category.
-data StartEnum =
+data Category =
     Version Int Int Bool
   -- ^ Major, minor, the bool indicates if it is deprecated.
   | Extension Extension String Bool
@@ -180,6 +179,7 @@ value = pHex
   <|> Deci . read <$> many1 digit
   <|> Identifier <$> identifier
 
+pHex :: P Value
 pHex = h <$>
    try (string "0x" *> many1 hexDigit) <*>
    hexSuffix
@@ -200,7 +200,7 @@ pBlankLine :: P ()
 pBlankLine = () <$ (blanks >> eol)
 
 pStart :: P EnumLine
-pStart = Start <$> pStartEnum <*>
+pStart = Start <$> pCategory <*>
   (blanks *> token "enum:" *> optional (many1 alphaNum)) <* eol
 
 pPassthru :: P EnumLine
@@ -219,8 +219,8 @@ pUse = Use <$>
   (blanks1 *> token "use" *> identifier_) <*>
   identifier_ <* eol
 
-pStartEnum :: P StartEnum
-pStartEnum =
+pCategory :: P Category
+pCategory =
   Version <$>
   try (string "VERSION_" *> digit') <*>
   (char '_' *> digit') <*>
@@ -288,8 +288,8 @@ showEnumLine :: EnumLine -> String
 showEnumLine el = case el of
   Comment x -> x
   BlankLine -> ""
-  Start se Nothing -> showStartEnum se ++ " enum:" 
-  Start se (Just x) -> showStartEnum se ++ " enum: " ++ x
+  Start se Nothing -> showCategory se ++ " enum:" 
+  Start se (Just x) -> showCategory se ++ " enum: " ++ x
   Passthru x -> "passthru: /* " ++ x ++ "*/"
   Enum a b Nothing -> "\t" ++ a ++ tabstop 55 a ++ "= " ++ showValue b
   Enum a b (Just x) -> "\t" ++ a ++ tabstop 55 a ++ "= " ++ showValue b ++ " # " ++ x
@@ -298,8 +298,8 @@ showEnumLine el = case el of
 tabstop :: Int -> String -> String
 tabstop t a = replicate ((t - length a) `div` 8) '\t'
 
-showStartEnum :: StartEnum -> String
-showStartEnum se = case se of
+showCategory :: Category -> String
+showCategory se = case se of
   Version i j True -> "VERSION_" ++ show i ++ "_" ++ show j ++ "_DEPRECATED"
   Version i j False -> "VERSION_" ++ show i ++ "_" ++ show j
   Extension e x True -> showExtension e ++ "_" ++ x ++ "_DEPRECATED"
@@ -545,9 +545,6 @@ data Prop =
   | Glextmask [String]
   deriving (Eq, Show)
 
--- TODO is it ok to reuse StartEnum ?
-type Category = StartEnum
-
 data ReturnType =
     Boolean
   | BufferOffset
@@ -657,7 +654,7 @@ pProperty = Property <$> choice (map try
     token "server-handcode" *> token "EXT" *> token "SGI" *>
     token "ignore" *> string "ARB")
   , VectorequivProp <$ (token "vectorequiv:" *> string "*")
-  , CategoryProp <$> (token "category:" *> many (pStartEnum <* blanks))
+  , CategoryProp <$> (token "category:" *> many (pCategory <* blanks))
   , VersionProp <$> (token "version:" *> many (version <* blanks))
   , DeprecatedProp <$> (token "deprecated:" *> many (version <* blanks))
   , GlxsingleProp <$ (token "glxsingle:" *> string "*")
@@ -678,7 +675,7 @@ pProperty = Property <$> choice (map try
   ]) <* eol
 
 pNewCategory :: P FunLine
-pNewCategory = NewCategory <$> (token "newcategory:" *> pStartEnum <*) eol
+pNewCategory = NewCategory <$> (token "newcategory:" *> pCategory <*) eol
 
 pFunction :: P FunLine
 pFunction = Function <$>
@@ -689,7 +686,7 @@ pProp :: P FunLine
 pProp = Prop <$> choice
   [ try pReturn
   , try pParam
-  , try pCategory
+  , try pCategory'
   , try pVersion
   , try pGlxropcode
   , try pOffset
@@ -757,10 +754,10 @@ pPassing = Value <$ string "value"
   <|>
   Reference <$ string "reference"
 
-pCategory :: P Prop
-pCategory = Category <$>
-  (field "category" *> pStartEnum <* blanks) <*>
-  (optional $ token "# old:" *> pStartEnum)
+pCategory' :: P Prop
+pCategory' = Category <$>
+  (field "category" *> pCategory <* blanks) <*>
+  (optional $ token "# old:" *> pCategory)
   <* eol
 
 pVersion :: P Prop
@@ -871,63 +868,83 @@ pGlextmask =
 -- Predicates
 ----------------------------------------------------------------------
 
+isReturn :: Prop -> Bool
 isReturn (Return _) = True
 isReturn _ = False
 
+isParam :: Prop -> Bool
 isParam (Param _ _) = True
 isParam _ = False
 
+isCategory :: Prop -> Bool
 isCategory (Category _ _) = True
 isCategory _ = False
 
+isSubcategory :: Prop -> Bool
 isSubcategory (Subcategory _) = True
 isSubcategory _ = False
 
+isFVersion :: Prop -> Bool
 isFVersion (FVersion _ _) = True
 isFVersion _ = False
 
+isGlxropcode :: Prop -> Bool
 isGlxropcode (Glxropcode _) = True
 isGlxropcode _ = False
 
+isOffset :: Prop -> Bool
 isOffset (Offset _) = True
 isOffset _ = False
 
+isWglflags :: Prop -> Bool
 isWglflags (Wglflags _) = True
 isWglflags _ = False
 
+isDlflags :: Prop -> Bool
 isDlflags (Dlflags _) = True
 isDlflags _ = False
 
+isGlxflags :: Prop -> Bool
 isGlxflags (Glxflags _ _) = True
 isGlxflags _ = False
 
+isGlxsingle :: Prop -> Bool
 isGlxsingle (Glxsingle _) = True
 isGlxsingle _ = False
 
+isDeprecated :: Prop -> Bool
 isDeprecated (Deprecated _ _) = True
 isDeprecated _ = False
 
+isFExtension :: Prop -> Bool
 isFExtension (FExtension _) = True
 isFExtension _ = False
 
+isGlxvendorpriv :: Prop -> Bool
 isGlxvendorpriv (Glxvendorpriv _) = True
 isGlxvendorpriv _ = False
 
+isGlfflags :: Prop -> Bool
 isGlfflags (Glfflags _) = True
 isGlfflags _ = False
 
+isAllowInside :: Prop -> Bool
 isAllowInside AllowInside = True
 isAllowInside _ = False
 
+isVectorequiv :: Prop -> Bool
 isVectorequiv (Vectorequiv _) = True
 isVectorequiv _ = False
 
+isGlxvectorequiv :: Prop -> Bool
 isGlxvectorequiv (Glxvectorequiv _) = True
 isGlxvectorequiv _ = False
 
+isAlias :: Prop -> Bool
 isAlias (Alias _) = True
 isAlias _ = False
 
+isGlextmask :: Prop -> Bool
 isGlextmask (Glextmask _) = True
 isGlextmask _ = False
 
