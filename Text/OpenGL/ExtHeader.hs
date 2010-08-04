@@ -9,14 +9,8 @@ import qualified Text.OpenGL.Spec as Spec
 import Text.OpenGL.Spec
 import Text.OpenGL.Api
 
--- The passthrus, then a list of category. Each category is paired with
--- a list of defined key-value pairs.
-type Enumerants = ([String], [(Category, [Enumerant])])
-
-data Enumeration =
-    Enumeration Category [Enumerant]
-  | EPassthru String
-  deriving Show
+-- Each category is paired with a list of defined key-value pairs.
+type Enumerants = [(Category, [Enumerant])]
 
 data Enumerant =
     Define String Value
@@ -76,7 +70,7 @@ extractHeaderItems xs = go xs
     in if hasHeaderCategory f
        then goF (HFunctions [f] []) r
        else go r
-  go (z:zs) = go zs
+  go (_:zs) = go zs
   go [] = []
   goC (HNewCategory c ps) (Spec.FPassthru str : zs) =
     goC (HNewCategory c (ps++[str])) zs
@@ -88,7 +82,7 @@ extractHeaderItems xs = go xs
     in if hasHeaderCategory f
           then HNewCategory c ps : goF (HFunctions [f] []) r
           else goC (HNewCategory c ps) r
-  goC c (z:zs) = goC c zs
+  goC c (_:zs) = goC c zs
   goC c [] = [c]
   goF (HFunctions fs ps) (Spec.FPassthru str : zs) =
     goF (HFunctions fs (ps++[str])) zs
@@ -103,7 +97,7 @@ extractHeaderItems xs = go xs
     in if newf
        then HFunctions fs ps : goF (HFunctions [f] []) r
        else goF (HFunctions (fs++[f]) ps) r
-  goF fs (z:zs) = goF fs zs
+  goF fs (_:zs) = goF fs zs
   goF fs [] = [fs]
 
 hasHeaderCategory :: Function -> Bool
@@ -113,22 +107,20 @@ hasHeaderCategory f = case funCategory f of
   _ -> True
 
 -- TODO don't hardcode it, make it an option.
-hasHeaderCategory' :: Enumeration -> Bool
-hasHeaderCategory' (Enumeration c _) = case c of
+hasHeaderCategory' :: (Category,[Enumerant]) -> Bool
+hasHeaderCategory' (c, _) = case c of
   Spec.Version 1 0 _ -> False
   Spec.Version 1 1 _ -> False
   _ -> True
-hasHeaderCategory' _ = True
 
-cEnumeration :: Enumeration -> [String]
+cEnumeration :: (Category,[Enumerant]) -> [String]
 cEnumeration e = case e of
-  Enumeration c es ->
+  (c, es) ->
     [ "#ifndef GL_" ++ cCategory c
     ] ++ map cE es ++
     [ "#endif"
     , ""
     ]
-  EPassthru str -> [str]
 
 cE :: Enumerant -> String
 cE e = case e of
@@ -152,25 +144,25 @@ showHex' :: Integral a => Int -> a -> String
 showHex' l i = replicate (l - length h) '0' ++ h
   where h = map toUpper (showHex i "")
 
-groupEnums :: [EnumLine] -> [Enumeration]
+groupEnums :: [EnumLine] -> Enumerants
 groupEnums xs = go xs
   where
   go (Spec.Comment _ : zs) = go zs
   go (Spec.BlankLine : zs) = go zs
-  go (Spec.Start se _ : zs) = goS (Enumeration se []) zs
-  go (Spec.Passthru str : zs) = EPassthru str : go zs
+  go (Spec.Start se _ : zs) = goS (se, []) zs
+  go (Spec.Passthru str : zs) = error "encountering a Passthru before a Start"
   go (Spec.Enum _ _ _ : _) = error "encoutering an Enum before a Start"
   go (Spec.Use _ _ : _) = error "encoutering a Use before a Start"
   go [] = []
   goS e (Spec.Comment _ : zs) = goS e zs
   goS e (Spec.BlankLine : zs) = goS e zs
-  goS e (Spec.Start se _ : zs) = e : goS (Enumeration se []) zs
-  goS (Enumeration se es) (Spec.Passthru str : zs) =
-    goS (Enumeration se (es++[EPassthru' str])) zs
-  goS (Enumeration se es) (Spec.Enum a b _ : zs) =
-    goS (Enumeration se (es++[Define a b])) zs
-  goS (Enumeration se es) (Spec.Use a b : zs) =
-    goS (Enumeration se (es++[EUse a b])) zs
+  goS e (Spec.Start se _ : zs) = e : goS (se, []) zs
+  goS (se, es) (Spec.Passthru str : zs) =
+    goS (se, (es++[EPassthru' str])) zs
+  goS (se, es) (Spec.Enum a b _ : zs) =
+    goS (se, (es++[Define a b])) zs
+  goS (se, es) (Spec.Use a b : zs) =
+    goS (se, (es++[EUse a b])) zs
   goS e [] = [e]
 
 -- TODO make it a special option for sanity-check.
@@ -202,10 +194,8 @@ glextHeader typeMap enums funs = unlines $
   f a b = False
   -- The "SGIX_ycrcb_subsample" has no enum in the original glext.h.
   -- The enum "2X_BIT_ATI" is present twice.
-  g (Enumeration v@(Spec.Extension Spec.SGIX "ycrcb_subsample" False) _) =
-    Enumeration v []
-  g (Enumeration c es) = Enumeration c $ nubBy g' es
-  g e = e
+  g (v@(Spec.Extension Spec.SGIX "ycrcb_subsample" False), _) = (v, [])
+  g (c, es) = (c, nubBy g' es)
   g' (Define "2X_BIT_ATI" _) (Define "2X_BIT_ATI" _) = True
   g' _ _ = False
 
