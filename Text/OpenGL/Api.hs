@@ -1,13 +1,7 @@
 module Text.OpenGL.Api where
 
-import Control.Applicative ((<$>))
-import Data.List (find, groupBy, intersperse, nubBy, partition)
-import Data.Char (toUpper)
+import Data.List (partition)
 import qualified Data.Map as M
-import Data.Function (on)
-import Numeric (showHex)
-
-import System.IO.Unsafe (unsafePerformIO)
 
 import qualified Text.OpenGL.Spec as Spec
 import Text.OpenGL.Spec hiding (Function)
@@ -83,10 +77,12 @@ mkFunction a b (Spec.Return r:ps) =
   g x0 (Spec.Param x1 (Spec.ParamType x y z))
     | x0 == x1 = Parameter x0 x y z
     | otherwise = error "argument and parameter don't match"
+  g _ _ = error "can't happen"
 
 mkFunction _ _ _ =
   error "The list of properties doesn't begin with the return type."
 
+mkTypeMap :: [TmLine] -> M.Map String (TmType, Bool)
 mkTypeMap xs = foldr f M.empty xs
   where f (Spec.TmComment _) m = m
         f (Spec.TmEntry x t b) m = M.insert x (t,b) m
@@ -101,102 +97,122 @@ extractFunctions' xs = go y ys
   g (Spec.Function _ _) = True
   g _ = False
   e (Spec.Prop p) = p
+  e _ = error "can't happen"
   go (Spec.Function a b) zs =
     let (props,r) = break g zs
     in case r of
       (fun2:rest) -> (a,b,map e props) : go fun2 rest
       [] -> [(a,b,map e props)]
+  go _ _ = error "doesn't start by a Function"
 
 extractFunctions :: [Spec.FunLine] -> [Function]
 extractFunctions = map (\(a,b,c) -> mkFunction a b c) . extractFunctions'
 
+extractSubcategory :: [Spec.Prop] -> Maybe String
 extractSubcategory l = case filter isSubcategory l of
   [] -> Nothing
   [Spec.Subcategory s] -> Just s
   _ -> error "More than one element"
 
+extractFVersion :: [Spec.Prop] -> Maybe (Int, Int)
 extractFVersion l = case filter isFVersion l of
   [] -> Nothing
   [Spec.FVersion i j] -> Just (i,j)
   [_,Spec.FVersion i j] -> Just (i,j) -- TODO some functions have two version properties
   _ -> error "More than one element"
 
+extractGlxropcode :: [Spec.Prop] -> Maybe Question
 extractGlxropcode l = case filter isGlxropcode l of
   [] -> Nothing
   [Spec.Glxropcode q] -> Just q
   _ -> error "More than one element"
 
+extractOffset :: [Spec.Prop] -> Maybe (Maybe Question)
 extractOffset l = case filter isOffset l of
   [] -> Nothing
   [Spec.Offset mq] -> Just mq
   _ -> error "More than one element"
 
+extractWglflags :: [Spec.Prop] -> Maybe [Wglflag]
 extractWglflags l = case filter isWglflags l of
   [] -> Nothing
   [Spec.Wglflags fs] -> Just fs
   _ -> error "More than one element"
 
+extractDlflags :: [Prop] -> Maybe Dlflag
 extractDlflags l = case filter isDlflags l of
   [] -> Nothing
   [Spec.Dlflags fs] -> Just fs
   _ -> error "More than one element"
 
+extractGlxflags :: [Spec.Prop] -> Maybe ([Glxflag], Maybe [Glxflag])
 extractGlxflags l = case filter isGlxflags l of
   [] -> Nothing
   [Spec.Glxflags fs mfs] -> Just (fs,mfs)
   [_,Spec.Glxflags fs mfs] -> Just (fs,mfs) -- TODO some have two properties
   _ -> error "More than one element"
 
+extractGlxsingle :: [Spec.Prop] -> Maybe Question
 extractGlxsingle l = case filter isGlxsingle l of
   [] -> Nothing
   [Spec.Glxsingle q] -> Just q
   _ -> error "More than one element"
 
+extractDeprecated :: [Spec.Prop] -> Maybe (Int, Int)
 extractDeprecated l = case filter isDeprecated l of
   [] -> Nothing
   [Spec.Deprecated i j] -> Just (i,j)
   _ -> error "More than one element"
 
+extractFExtension :: [Spec.Prop] -> Maybe [FExtension]
 extractFExtension l = case filter isFExtension l of
   [] -> Nothing
   [Spec.FExtension es] -> Just es
   _ -> error "More than one element"
 
+extractGlxvendorpriv :: [Spec.Prop] -> Maybe Question
 extractGlxvendorpriv l = case filter isGlxvendorpriv l of
   [] -> Nothing
   [Spec.Glxvendorpriv q] -> Just q
   _ -> error "More than one element"
 
+extractGlfflags :: [Spec.Prop] -> Maybe [Glfflag]
 extractGlfflags l = case filter isGlfflags l of
   [] -> Nothing
   [Spec.Glfflags fs] -> Just fs
   _ -> error "More than one element"
 
+extractAllowInside :: [Spec.Prop] -> Bool
 extractAllowInside l = case filter isAllowInside l of
   [] -> False
   [Spec.AllowInside] -> True
   _ -> error "More than one element"
 
+extractVectorequiv :: [Spec.Prop] -> Maybe String
 extractVectorequiv l = case filter isVectorequiv l of
   [] -> Nothing
   [Spec.Vectorequiv s] -> Just s
   _ -> error "More than one element"
 
+extractGlxvectorequiv :: [Spec.Prop] -> Maybe String
 extractGlxvectorequiv l = case filter isGlxvectorequiv l of
   [] -> Nothing
   [Spec.Glxvectorequiv s] -> Just s
   _ -> error "More than one element"
 
+extractAlias :: [Spec.Prop] -> Maybe String
 extractAlias l = case filter isAlias l of
   [] -> Nothing
   [Spec.Alias s] -> Just s
   _ -> error "More than one element"
 
+extractGlextmask :: [Spec.Prop] -> Maybe [String]
 extractGlextmask l = case filter isGlextmask l of
   [] -> Nothing
   [Spec.Glextmask ss] -> Just ss
   _ -> error "More than one element"
 
+showFunction :: Function -> String
 showFunction f = unlines $
   [ show $ funReturnType f
   , funName f

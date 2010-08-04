@@ -4,6 +4,7 @@ dist/setup-config: opengl-api.cabal
 dist/build/opengl-api/opengl-api: Text/OpenGL/Spec.hs \
 		Text/OpenGL/Api.hs \
 		Text/OpenGL/ExtHeader.hs \
+		Text/OpenGL/Checks.hs \
 		dist/setup-config
 	cabal build
 

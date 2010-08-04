@@ -68,6 +68,7 @@ extractHeaderItems xs = go xs
   g (Spec.Prop _) = False
   g _ = True
   e (Spec.Prop p) = p
+  e _ = error "can't happen"
   go (Spec.FPassthru str : zs) =
     HPassthru str : go zs
   go (Spec.NewCategory c : zs) =
@@ -158,7 +159,7 @@ groupEnums xs = go xs
   go (Spec.Comment _ : zs) = go zs
   go (Spec.BlankLine : zs) = go zs
   go (Spec.Start se _ : zs) = goS (se, []) zs
-  go (Spec.Passthru str : zs) = error "encountering a Passthru before a Start"
+  go (Spec.Passthru _ : _) = error "encountering a Passthru before a Start"
   go (Spec.Enum _ _ _ : _) = error "encoutering an Enum before a Start"
   go (Spec.Use _ _ : _) = error "encoutering a Use before a Start"
   go [] = []
@@ -199,11 +200,11 @@ glextHeader typeMap enums funs = unlines $
   -- The "newcategory: MESA_ycbcr_texture" is present twice.
   f (HNewCategory (Spec.Extension Spec.MESA "ycbcr_texture" False) [])
     (HNewCategory (Spec.Extension Spec.MESA "ycbcr_texture" False ) []) = True
-  f a b = False
+  f _ _ = False
   -- The "SGIX_ycrcb_subsample" has no enum in the original glext.h.
   -- The enum "2X_BIT_ATI" is present twice.
   g (v@(Spec.Extension Spec.SGIX "ycrcb_subsample" False), _) = (v, [])
-  g (c, es) = (c, nubBy g' es)
+  g (c, xs) = (c, nubBy g' xs)
   g' (Define "2X_BIT_ATI" _) (Define "2X_BIT_ATI" _) = True
   g' _ _ = False
 
@@ -320,7 +321,7 @@ cReturnType t = case t of
   x -> show x
 
 cParameters :: TypeMap -> [Parameter] -> String
-cParameters tm [] = "void"
+cParameters _ [] = "void"
 cParameters tm p = concat . intersperse ", " $ map (cParameter tm) p
 
 cParameter :: TypeMap -> Parameter -> String

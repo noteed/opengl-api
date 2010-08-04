@@ -8,7 +8,6 @@ import System.Console.CmdArgs
 import Control.Applicative ((<$>))
 
 import Text.OpenGL.Spec
-import Text.OpenGL.Api
 import Text.OpenGL.ExtHeader
 
 versionString :: String
