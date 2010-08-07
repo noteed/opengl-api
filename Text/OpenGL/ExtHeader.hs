@@ -318,6 +318,7 @@ cReturnType t = case t of
   Spec.BufferOffset -> "GLintptr"
   Spec.FramebufferStatus -> "GLenum"
   Spec.Sync -> "GLsync"
+  Spec.List -> "GLuint"
   x -> show x
 
 cParameters :: TypeMap -> [Parameter] -> String
