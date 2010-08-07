@@ -7,30 +7,9 @@ import Text.OpenGL.Spec
 import Text.OpenGL.Api
 import Text.OpenGL.ExtHeader
 
-{-
-void
-hdEnableVertexAttribArray (char * file, int line, GLuint index)
-{ 
-  GLenum e = glGetError ();
-  if (e != GL_NO_ERROR)
-  { 
-    fprintf (stderr, "%s:%d: Remaining OpenGL error:\n", file, line);
-    print_gl_error_ (e);
-  }
-  glEnableVertexAttribArray (index);
-  e = glGetError ();
-  if (e != GL_NO_ERROR)
-  { 
-    fprintf (stderr, "%s:%d: glEnableVertexAttribArray (%d):\n", file, line, index);
-    print_gl_error_ (e);
-  }
-}
-
-#define glEnableVertexAttribArray hdEnableVertexAttribArray
--}
-
 mkChecks :: [TmLine] -> [EnumLine] -> [FunLine] -> (String,String)
-mkChecks tls els fls = (hdefines fs, cdefines tm fs)
+mkChecks tls els fls = (hdefines' tm fs, cdefines tm fs)
+--mkChecks tls els fls = (hdefines fs, cdefines tm fs)
   where
   fs = filter f $ extractFunctions fls
   tm = mkTypeMap tls
@@ -49,6 +28,13 @@ hdefines fs = unlines $
   [ "#endif /* GL_WITH_CHECKS_H */"
   ]
 
+hdefines' tm fs = unlines $
+  [ "#ifndef GL_WITH_CHECKS_H"
+  , "#define GL_WITH_CHECKS_H"
+  ] ++ map (hdefine' tm) fs ++
+  [ "#endif /* GL_WITH_CHECKS_H */"
+  ]
+
 cdefines :: TypeMap -> [Function] -> String
 cdefines tm fs = unlines $
   [ "#include <stdio.h>"
@@ -59,6 +45,19 @@ cdefines tm fs = unlines $
 hdefine :: Function -> String
 hdefine x = let n = funName x in "#define gl" ++ n ++ "(...) xx" ++
   n ++ "(__FILE__, __LINE__, __VA_ARGS__)"
+
+hdefine' tm x = unlines $
+  [ "#define gl" ++ funName x ++ "(" ++ cParameters' "" (funParameters x) ++ ") \\"
+  , "gl" ++ funName x ++ "(" ++ cParameters' "" (funParameters x) ++ "); \\"
+  , "{GLenum e = glGetError (); \\"
+  , "if (e != GL_NO_ERROR) \\"
+  , "{ \\"
+  , "  fprintf (stderr, \"%s:%d: gl" ++ funName x ++ " (" ++
+    cFormats tm (funParameters x) ++ "):\\n\", \\\n" ++
+    "    __FILE__, __LINE__" ++ cParameters' ", " (funParameters x) ++ "); \\"
+  , "  print_gl_error_ (e); \\"
+  , "}}"
+  ]
 
 cdefine :: TypeMap -> Function -> String
 cdefine tm x = unlines $
