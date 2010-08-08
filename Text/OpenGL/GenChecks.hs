@@ -7,6 +7,8 @@
 -- available in the libGL.
 -- TODO the macros use a call to print_gl_error, which should be provided
 -- by the user.
+-- TODO there are more functions that can be called between begin/end than
+-- the one with funAllowInside (glGetError can't be called betwee begin/end.
 module Text.OpenGL.GenChecks where
 
 import Data.List (intersperse)
