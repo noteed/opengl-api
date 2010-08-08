@@ -63,6 +63,6 @@ processCmd (Checks {tmFn,esFn,fsFn})= do
     (Right tm,Right es,Right fs) -> do
       let (h,c) = mkChecks tm es fs
       writeFile "gl-checks.h" h
-      -- writeFile "gl-checks.c" c
+      -- writeFile "gl-checks.c" c -- TODO make one with macro only, and one with macro + c code
 
 

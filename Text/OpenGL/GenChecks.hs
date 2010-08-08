@@ -1,3 +1,12 @@
+-- Generate macros to always call glGetError after any OpenGL command and
+-- report the error if any.
+-- There is also the possiblity (commented for now) to generate macros and
+-- c code. The advantage is that the types are specified in the signature
+-- of the generated functions; the disadvantage is that the generated code
+-- include functions defined in the glext header, but not necessarily
+-- available in the libGL.
+-- TODO the macros use a call to print_gl_error, which should be provided
+-- by the user.
 module Text.OpenGL.GenChecks where
 
 import Data.List (intersperse)
@@ -7,6 +16,8 @@ import Text.OpenGL.Spec
 import Text.OpenGL.Api
 import Text.OpenGL.ExtHeader
 
+-- TODO the data given to mkChecks should be the higher-level Api data,
+-- not the line-oriented Spec data.
 mkChecks :: [TmLine] -> [EnumLine] -> [FunLine] -> (String,String)
 mkChecks tls els fls = (hdefines' tm fs, cdefines tm fs)
 --mkChecks tls els fls = (hdefines fs, cdefines tm fs)
@@ -15,7 +26,7 @@ mkChecks tls els fls = (hdefines' tm fs, cdefines tm fs)
   tm = mkTypeMap tls
   f x = not $ funName x `elem`
     [ "GetError"
-    , "MapNamedBufferRangeEXT" -- TODO make it an option
+    , "MapNamedBufferRangeEXT" -- Not in my local glext.h, TODO make it an option
     , "FlushMappedNamedBufferRangeEXT"
     , "NamedCopyBufferSubDataEXT"
     ]
@@ -28,6 +39,7 @@ hdefines fs = unlines $
   [ "#endif /* GL_WITH_CHECKS_H */"
   ]
 
+hdefines' :: TypeMap -> [Function] -> String
 hdefines' tm fs = unlines $
   [ "#ifndef GL_WITH_CHECKS_H"
   , "#define GL_WITH_CHECKS_H"
@@ -46,6 +58,7 @@ hdefine :: Function -> String
 hdefine x = let n = funName x in "#define gl" ++ n ++ "(...) xx" ++
   n ++ "(__FILE__, __LINE__, __VA_ARGS__)"
 
+hdefine' :: TypeMap -> Function -> String
 hdefine' tm x = unlines $
   [ "#define gl" ++ funName x ++ "(" ++ cParameters' "" (funParameters x) ++ ") \\"
   , "gl" ++ funName x ++ "(" ++ cParameters' "" (funParameters x) ++ "); \\"
