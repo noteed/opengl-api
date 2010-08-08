@@ -24,12 +24,14 @@ mkChecks tls els fls = (hdefines' tm fs, cdefines tm fs)
   where
   fs = filter f $ extractFunctions fls
   tm = mkTypeMap tls
-  f x = not $ funName x `elem`
+  f x = not (funName x `elem`
     [ "GetError"
     , "MapNamedBufferRangeEXT" -- Not in my local glext.h, TODO make it an option
     , "FlushMappedNamedBufferRangeEXT"
     , "NamedCopyBufferSubDataEXT"
-    ]
+    , "Begin"
+    , "End"
+    ]) && not (funAllowInside x)
 
 hdefines :: [Function] -> String
 hdefines fs = unlines $
