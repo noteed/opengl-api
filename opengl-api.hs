@@ -3,7 +3,7 @@ module Main where
 
 import Paths_opengl_api (version)
 import Data.Version (showVersion)
-import System.Console.CmdArgs
+import System.Console.CmdArgs.Implicit
 
 import Control.Applicative ((<$>))
 
@@ -14,32 +14,41 @@ import Text.OpenGL.GenChecks (mkChecks)
 versionString :: String
 versionString =
   "opengl-api " ++ showVersion version ++"\n\
-\Copyright (c) 2010 Vo Minh Thu.\n\
+\Copyright (c) 2010-2011 Vo Minh Thu.\n\
 \This is open source software. See the LICENSE file for conditions."
 
 main :: IO ()
-main = do
-  cmd <- cmdArgs versionString [header, checks]
-  processCmd cmd
+main = (>>= processCmd) . cmdArgs $
+  modes
+   [ header, checks
+   ] 
+  &= summary versionString
+  &= program "opengl-api"
 
 data Cmd =
     Header { tmFn :: String, esFn :: String, fsFn :: String }
   | Checks { tmFn :: String, esFn :: String, fsFn :: String }
   deriving (Show, Eq, Data, Typeable)
 
-header :: System.Console.CmdArgs.Mode Cmd
-header = mode $ Header
-  { tmFn = def &= typFile & text "type map" & empty "gl.tm"
-  , esFn = def &= typFile & text "enumerations" & empty "enumext.spec"
-  , fsFn = def &= typFile & text "functions" & empty "gl.spec"
-  } &= text "Produce a C header file (normally called glext.h)."
+header :: Cmd
+header = Header
+  { tmFn = "gl.tm" &= typFile &= help "The type map file"
+    &= explicit &= name "t" &= name "type-map"
+  , esFn = "enumext.spec" &= typFile &= help "The enumerations file"
+    &= explicit &= name "e" &= name "enumerations"
+  , fsFn = "gl.spec" &= typFile &= help "The functions file"
+    &= explicit &= name "f" &= name "functions"
+  } &= help "Produce a C header file (normally called glext.h)."
 
-checks :: System.Console.CmdArgs.Mode Cmd
-checks = mode $ Checks
-  { tmFn = def &= typFile & text "type map" & empty "gl.tm"
-  , esFn = def &= typFile & text "enumerations" & empty "enumext.spec"
-  , fsFn = def &= typFile & text "functions" & empty "gl.spec"
-  } &= text "Produce a drop-in replacement for gl.h with glGetError checks."
+checks :: Cmd
+checks = Checks
+  { tmFn = "gl.tm" &= typFile &= help "The type map file"
+    &= explicit &= name "t" &= name "type-map"
+  , esFn = "enumext.spec" &= typFile &= help "The enumerations file"
+    &= explicit &= name "e" &= name "enumerations"
+  , fsFn = "gl.spec" &= typFile &= help "The functions file"
+    &= explicit &= name "f" &= name "functions"
+  } &= help "Produce a drop-in replacement for gl.h with glGetError checks."
 
 processCmd :: Cmd -> IO ()
 processCmd (Header {tmFn,esFn,fsFn})= do
