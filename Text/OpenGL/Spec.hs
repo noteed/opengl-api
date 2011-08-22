@@ -177,7 +177,9 @@ identifier_ = identifier <* blanks
 
 value :: P Value
 value = pHex
-  <|> Deci . read <$> many1 digit
+  <|> Deci . read <$> (optionMaybe (char '-') >>= \sig ->
+             (maybe (id) (:) sig) <$> many1 digit)
+  <|> Deci . read <$> (maybe id (:) <$> optionMaybe (char '-') <*> many1 digit)
   <|> Identifier <$> identifier
 
 pHex :: P Value
