@@ -11,6 +11,7 @@ module Text.OpenGL.Spec (
   EnumLine(..), Category(..), Value(..), Extension(..),
   enumLines, enumLine,
   parseAndShow, reparse,
+  showCategory,
 
   TmLine(..), TmType(..),
   tmLines, tmLine,
@@ -78,7 +79,7 @@ data EnumLine =
   -- ^ A passthru line with its comment.
   | Enum String Value (Maybe String)
   -- ^ An enumerant, in format String = String # String.
-  | Use String String
+  | Use Category String
   -- ^ A use line.
   deriving (Eq, Show)
 
@@ -201,7 +202,7 @@ pBlankLine = () <$ (blanks >> eol)
 
 pStart :: P EnumLine
 pStart = Start <$> pCategory <*>
-  (blanks *> token "enum:" *> optional (many1 alphaNum)) <* eol
+  (blanks *> token "enum:" *> optional (many1 $ noneOf "\n")) <* eol
 
 pPassthru :: P EnumLine
 pPassthru = Passthru <$>
@@ -216,8 +217,8 @@ pEnum = Enum <$>
 
 pUse :: P EnumLine
 pUse = Use <$>
-  (blanks1 *> token "use" *> identifier_) <*>
-  identifier_ <* eol
+  (blanks1 *> token "use" *> pCategory <* blanks1) <*>
+  identifier_ <* optional (blanks *> string "#" *> (many $ noneOf "\n")) <* eol
 
 pCategory :: P Category
 pCategory =
@@ -288,12 +289,12 @@ showEnumLine :: EnumLine -> String
 showEnumLine el = case el of
   Comment x -> x
   BlankLine -> ""
-  Start se Nothing -> showCategory se ++ " enum:" 
+  Start se Nothing -> showCategory se ++ " enum:"
   Start se (Just x) -> showCategory se ++ " enum: " ++ x
   Passthru x -> "passthru: /* " ++ x ++ "*/"
   Enum a b Nothing -> "\t" ++ a ++ tabstop 55 a ++ "= " ++ showValue b
   Enum a b (Just x) -> "\t" ++ a ++ tabstop 55 a ++ "= " ++ showValue b ++ " # " ++ x
-  Use a b -> "\tuse " ++ a ++ tabstop 39 (a ++ "    ") ++ "    " ++ b
+  Use a b -> "\tuse " ++ showCategory a ++ tabstop 39 (showCategory a ++ "    ") ++ "    " ++ b
 
 tabstop :: Int -> String -> String
 tabstop t a = replicate ((t - length a) `div` 8) '\t'
