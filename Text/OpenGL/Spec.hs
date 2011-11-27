@@ -91,7 +91,7 @@ data Category =
   | Extension Extension String Bool
   -- ^ The extension prefix, its, and whether it is deprecated.
   | Name String
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data Value = Hex Integer Int (Maybe HexSuffix) | Deci Int | Identifier String
   deriving (Eq, Show)
@@ -127,7 +127,7 @@ data Extension =
   | SUN
   | SUNX
   | WIN
-  deriving (Eq, Read, Show)
+  deriving (Eq, Ord, Read, Show)
 
 ----------------------------------------------------------------------
 -- Parsing (line oriented)
