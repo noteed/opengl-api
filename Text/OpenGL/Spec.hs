@@ -172,6 +172,11 @@ digit' = (read . (:[])) <$> digit
 identifier :: P String
 identifier = many1 . oneOf $ "_" ++ ['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z']
 
+depIdentifier :: P String
+depIdentifier = many1 ( notFollowedBy (string "_DEPRECATED") *> oneOf idents)
+    where idents = "_" ++ ['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z']
+
+
 identifier_ :: P String
 identifier_ = identifier <* blanks
 
@@ -229,7 +234,7 @@ pCategory =
   (char '_' *> digit') <*>
   (opt "_DEPRECATED")
   <|>
-  Extension <$> pExt <*> (char '_' *> identifier) <*>
+  Extension <$> pExt <*> (char '_' *> depIdentifier) <*>
   (opt "_DEPRECATED")
   <|>
   Name <$> tag -- many1 alphaNum
