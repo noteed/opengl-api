@@ -70,7 +70,7 @@ processCmd (Checks {tmFn,esFn,fsFn})= do
     (_,Left err,_) -> putStrLn $ esFn ++ ":\n" ++ show err
     (_,_,Left err) -> putStrLn $ fsFn ++ ":\n" ++ show err
     (Right tm,Right es,Right fs) -> do
-      let (h,c) = mkChecks tm es fs
+      let (h,_) = mkChecks tm es fs
       writeFile "gl-checks.h" h
       -- writeFile "gl-checks.c" c -- TODO make one with macro only, and one with macro + c code
 

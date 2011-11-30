@@ -21,7 +21,7 @@ import Text.OpenGL.ExtHeader
 -- TODO the data given to mkChecks should be the higher-level Api data,
 -- not the line-oriented Spec data.
 mkChecks :: [TmLine] -> [EnumLine] -> [FunLine] -> (String,String)
-mkChecks tls els fls = (hdefines' tm fs, cdefines tm fs)
+mkChecks tls _ fls = (hdefines' tm fs, cdefines tm fs)
 --mkChecks tls els fls = (hdefines fs, cdefines tm fs)
   where
   fs = filter f $ extractFunctions fls
