@@ -11,7 +11,7 @@ module Text.OpenGL.Spec (
   EnumLine(..), Category(..), Value(..), Extension(..),
   enumLines, enumLine,
   parseAndShow, reparse,
-  showCategory,
+  showCategory, pCategory,
 
   TmLine(..), TmType(..),
   tmLines, tmLine,
