@@ -160,4 +160,7 @@ cFormat tm (Parameter _ t _ p) = t'
 		Star -> "%p"
 		UnderscoreGLfuncptr -> "%p"
 		GLvoidStarConst -> "%p"
+		GLvdpauSurfaceNV -> "%td" -- typedef GLintptr GLvdpauSurfaceNV;
+		GLdebugprocAMD -> "GLDEBUGPROCAMD"
+		GLdebugprocARB -> "GLDEBUGPROCARB"
 

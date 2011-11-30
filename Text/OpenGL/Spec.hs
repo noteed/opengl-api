@@ -402,6 +402,9 @@ data TmType =
   | GLUtesselator
   | GLvoid
   | GLvoidStarConst
+  | GLvdpauSurfaceNV
+  | GLdebugprocAMD
+  | GLdebugprocARB
   deriving (Eq, Read, Show)
 
 ----------------------------------------------------------------------
@@ -444,6 +447,7 @@ pTmType = choice $ map try
   , GLUnurbs <$ token "GLUnurbs"
   , GLUquadric <$ token "GLUquadric"
   , GLUtesselator <$ token "GLUtesselator"
+  , GLvdpauSurfaceNV <$ token "GLvdpauSurfaceNV"
   , read <$> identifier
   ]
 
@@ -567,6 +571,7 @@ data ReturnType =
   | UInt32
   | Void
   | VoidPointer
+  | VdpauSurfaceNV
   deriving (Eq, Show)
 
 -- | The boolean is true if it is an in type, false if it is out.
@@ -733,8 +738,9 @@ pReturnType = choice
   , try $ String <$ string "String"
   , Sync <$ string "sync"
   , UInt32 <$ string "UInt32"
-  , Void <$ string "void"
+  , try $ Void <$ string "void"
   , VoidPointer <$ string "VoidPointer"
+  , VdpauSurfaceNV <$ string "vdpauSurfaceNV"
   ]
 
 pParam :: P Prop
