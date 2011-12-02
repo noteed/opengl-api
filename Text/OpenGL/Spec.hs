@@ -448,6 +448,8 @@ pTmType = choice $ map try
   , GLUquadric <$ token "GLUquadric"
   , GLUtesselator <$ token "GLUtesselator"
   , GLvdpauSurfaceNV <$ token "GLvdpauSurfaceNV"
+  , GLdebugprocAMD <$ token "GLDEBUGPROCAMD"
+  , GLdebugprocARB <$ token "GLDEBUGPROCARB"
   , read <$> identifier
   ]
 
