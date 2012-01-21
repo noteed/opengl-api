@@ -171,7 +171,7 @@ groupEnums xs = go xs
   goS (se, es) (Spec.Enum a b _ : zs) =
     goS (se, (es++[Define a b])) zs
   goS (se, es) (Spec.Use a b : zs) =
-    goS (se, (es++[EUse a b])) zs
+    goS (se, (es++[EUse (showCategory a) b])) zs
   goS e [] = [e]
 
 -- TODO make it a special option for sanity-check.
@@ -192,7 +192,7 @@ glextHeader typeMap enums funs = unlines $
   -- The "newcategory: NV_fragment_program" is unecessary as some functions
   -- have that category.
   rewrite (HNewCategory
-    (Spec.Extension Spec.NV "fragment_program" False) [p] : 
+    (Spec.Extension Spec.NV "fragment_program" False) [p] :
     HFunctions fs ps :
     ys) = HFunctions fs (p:ps) : rewrite ys
   rewrite (x:xs) = x : rewrite xs

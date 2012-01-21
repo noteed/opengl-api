@@ -11,6 +11,7 @@ module Text.OpenGL.Spec (
   EnumLine(..), Category(..), Value(..), Extension(..),
   enumLines, enumLine,
   parseAndShow, reparse,
+  showCategory, pCategory,
 
   TmLine(..), TmType(..),
   tmLines, tmLine,
@@ -78,7 +79,7 @@ data EnumLine =
   -- ^ A passthru line with its comment.
   | Enum String Value (Maybe String)
   -- ^ An enumerant, in format String = String # String.
-  | Use String String
+  | Use Category String
   -- ^ A use line.
   deriving (Eq, Show)
 
@@ -90,7 +91,7 @@ data Category =
   | Extension Extension String Bool
   -- ^ The extension prefix, its, and whether it is deprecated.
   | Name String
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data Value = Hex Integer Int (Maybe HexSuffix) | Deci Int | Identifier String
   deriving (Eq, Show)
@@ -126,7 +127,7 @@ data Extension =
   | SUN
   | SUNX
   | WIN
-  deriving (Eq, Read, Show)
+  deriving (Eq, Ord, Read, Show)
 
 ----------------------------------------------------------------------
 -- Parsing (line oriented)
@@ -171,12 +172,19 @@ digit' = (read . (:[])) <$> digit
 identifier :: P String
 identifier = many1 . oneOf $ "_" ++ ['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z']
 
+depIdentifier :: P String
+depIdentifier = many1 ( notFollowedBy (string "_DEPRECATED") *> oneOf idents)
+    where idents = "_" ++ ['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z']
+
+
 identifier_ :: P String
 identifier_ = identifier <* blanks
 
 value :: P Value
 value = pHex
-  <|> Deci . read <$> many1 digit
+  <|> Deci . read <$> (optionMaybe (char '-') >>= \sig ->
+             (maybe (id) (:) sig) <$> many1 digit)
+  <|> Deci . read <$> (maybe id (:) <$> optionMaybe (char '-') <*> many1 digit)
   <|> Identifier <$> identifier
 
 pHex :: P Value
@@ -201,7 +209,7 @@ pBlankLine = () <$ (blanks >> eol)
 
 pStart :: P EnumLine
 pStart = Start <$> pCategory <*>
-  (blanks *> token "enum:" *> optional (many1 alphaNum)) <* eol
+  (blanks *> token "enum:" *> optional (many1 $ noneOf "\n")) <* eol
 
 pPassthru :: P EnumLine
 pPassthru = Passthru <$>
@@ -216,8 +224,8 @@ pEnum = Enum <$>
 
 pUse :: P EnumLine
 pUse = Use <$>
-  (blanks1 *> token "use" *> identifier_) <*>
-  identifier_ <* eol
+  (blanks1 *> token "use" *> pCategory <* blanks1) <*>
+  identifier_ <* optional (blanks *> string "#" *> (many $ noneOf "\n")) <* eol
 
 pCategory :: P Category
 pCategory =
@@ -226,7 +234,7 @@ pCategory =
   (char '_' *> digit') <*>
   (opt "_DEPRECATED")
   <|>
-  Extension <$> pExt <*> (char '_' *> identifier) <*>
+  Extension <$> pExt <*> (char '_' *> depIdentifier) <*>
   (opt "_DEPRECATED")
   <|>
   Name <$> tag -- many1 alphaNum
@@ -288,12 +296,12 @@ showEnumLine :: EnumLine -> String
 showEnumLine el = case el of
   Comment x -> x
   BlankLine -> ""
-  Start se Nothing -> showCategory se ++ " enum:" 
+  Start se Nothing -> showCategory se ++ " enum:"
   Start se (Just x) -> showCategory se ++ " enum: " ++ x
   Passthru x -> "passthru: /* " ++ x ++ "*/"
   Enum a b Nothing -> "\t" ++ a ++ tabstop 55 a ++ "= " ++ showValue b
   Enum a b (Just x) -> "\t" ++ a ++ tabstop 55 a ++ "= " ++ showValue b ++ " # " ++ x
-  Use a b -> "\tuse " ++ a ++ tabstop 39 (a ++ "    ") ++ "    " ++ b
+  Use a b -> "\tuse " ++ showCategory a ++ tabstop 39 (showCategory a ++ "    ") ++ "    " ++ b
 
 tabstop :: Int -> String -> String
 tabstop t a = replicate ((t - length a) `div` 8) '\t'
@@ -394,6 +402,9 @@ data TmType =
   | GLUtesselator
   | GLvoid
   | GLvoidStarConst
+  | GLvdpauSurfaceNV
+  | GLdebugprocAMD
+  | GLdebugprocARB
   deriving (Eq, Read, Show)
 
 ----------------------------------------------------------------------
@@ -436,6 +447,9 @@ pTmType = choice $ map try
   , GLUnurbs <$ token "GLUnurbs"
   , GLUquadric <$ token "GLUquadric"
   , GLUtesselator <$ token "GLUtesselator"
+  , GLvdpauSurfaceNV <$ token "GLvdpauSurfaceNV"
+  , GLdebugprocAMD <$ token "GLDEBUGPROCAMD"
+  , GLdebugprocARB <$ token "GLDEBUGPROCARB"
   , read <$> identifier
   ]
 
@@ -559,6 +573,7 @@ data ReturnType =
   | UInt32
   | Void
   | VoidPointer
+  | VdpauSurfaceNV
   deriving (Eq, Show)
 
 -- | The boolean is true if it is an in type, false if it is out.
@@ -725,8 +740,9 @@ pReturnType = choice
   , try $ String <$ string "String"
   , Sync <$ string "sync"
   , UInt32 <$ string "UInt32"
-  , Void <$ string "void"
+  , try $ Void <$ string "void"
   , VoidPointer <$ string "VoidPointer"
+  , VdpauSurfaceNV <$ string "vdpauSurfaceNV"
   ]
 
 pParam :: P Prop
