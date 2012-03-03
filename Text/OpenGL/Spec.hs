@@ -1,4 +1,3 @@
-{-# Language TypeSynonymInstances #-}
 -- |
 -- Code to represent and parse the enumext.spec file of the OpenGL
 -- registry. It works on the revision: 11742 (dated Tue, 15 Jun 2010),
@@ -142,7 +141,7 @@ enumLines = parse (many pEnumLine <* eof) "enumLines"
 enumLine :: String -> Either ParseError EnumLine
 enumLine = parse pEnumLine "enumLine"
 
-type P a = GenParser Char () a
+type P = Parser
 
 pEnumLine :: P EnumLine
 pEnumLine = choice
