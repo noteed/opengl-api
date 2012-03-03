@@ -49,9 +49,9 @@ module Text.OpenGL.Spec (
 import Numeric (readHex, showHex)
 import Data.Char (toUpper)
 import Control.Applicative
-import Text.ParserCombinators.Parsec hiding
-  (many, optional, (<|>), token)
-
+import Text.Parsec hiding
+    (many, optional, (<|>), token)
+import Text.Parsec.String
 
 ----------------------------------------------------------------------
 --
