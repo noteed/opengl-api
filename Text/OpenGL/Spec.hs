@@ -1,4 +1,3 @@
-{-# Language TypeSynonymInstances #-}
 -- |
 -- Code to represent and parse the enumext.spec file of the OpenGL
 -- registry. It works on the revision: 11742 (dated Tue, 15 Jun 2010),
@@ -49,9 +48,9 @@ module Text.OpenGL.Spec (
 import Numeric (readHex, showHex)
 import Data.Char (toUpper)
 import Control.Applicative
-import Text.ParserCombinators.Parsec hiding
-  (many, optional, (<|>), token)
-
+import Text.Parsec hiding
+    (many, optional, (<|>), token)
+import Text.Parsec.String
 
 ----------------------------------------------------------------------
 --
@@ -142,7 +141,7 @@ enumLines = parse (many pEnumLine <* eof) "enumLines"
 enumLine :: String -> Either ParseError EnumLine
 enumLine = parse pEnumLine "enumLine"
 
-type P a = GenParser Char () a
+type P = Parser
 
 pEnumLine :: P EnumLine
 pEnumLine = choice
@@ -322,7 +321,7 @@ showValue v = case v of
   Deci i -> show i
   Identifier x -> x
 
-showHex' :: Integral a => Int -> a -> String
+showHex' :: (Show a, Integral a) => Int -> a -> String
 showHex' l i = replicate (l - length h) '0' ++ h
   where h = map toUpper (showHex i "")
 
