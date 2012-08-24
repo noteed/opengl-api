@@ -149,7 +149,7 @@ showValue v = case v of
   Spec.Deci i -> show i
   Spec.Identifier x -> x
 
-showHex' :: Integral a => Int -> a -> String
+showHex' :: (Show a, Integral a) => Int -> a -> String
 showHex' l i = replicate (l - length h) '0' ++ h
   where h = map toUpper (showHex i "")
 
