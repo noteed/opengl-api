@@ -119,6 +119,7 @@ data Extension =
   | IBM
   | INGR
   | INTEL
+  | KHR
   | MESA
   | MESAX
   | NV
@@ -269,6 +270,7 @@ pExt = choice $ map (fmap r . try . string)
   , "IBM"
   , "INGR"
   , "INTEL"
+  , "KHR"
   , "MESAX"
   , "MESA"
   , "NV"
