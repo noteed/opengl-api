@@ -130,6 +130,7 @@ cFormat tm (Parameter _ t _ p) = t'
 		GLbyte -> "%d"
 		GLchar -> "%d"
 		GLcharARB -> "%d"
+		GLcharStarConst -> "%p"
 		GLclampd -> "%f"
 		GLclampf -> "%f"
 		GLdouble -> "%f"

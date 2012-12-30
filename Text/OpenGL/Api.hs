@@ -13,6 +13,7 @@ data Function = Function
   , funName :: String
   , funParameters :: [Parameter]
   , funCategory :: Category
+  , funProfile  :: (Maybe Profile)
   , funOldCategory :: Maybe Category
   , funSubcategory :: Maybe String
   , funVersion :: Maybe (Int,Int)
@@ -47,6 +48,7 @@ mkFunction a b (Spec.Return r:ps) =
     , funName = a
     , funParameters = args
     , funCategory = c
+    , funProfile  = extractProfile ps''
     , funOldCategory = c'
     , funSubcategory = extractSubcategory ps''
     , funVersion = extractFVersion ps''
@@ -112,6 +114,12 @@ extractSubcategory :: [Spec.Prop] -> Maybe String
 extractSubcategory l = case filter isSubcategory l of
   [] -> Nothing
   [Spec.Subcategory s] -> Just s
+  _ -> error "More than one element"
+
+extractProfile :: [Spec.Prop] -> Maybe Profile
+extractProfile l = case filter isProfile l of
+  [] -> Nothing
+  [Spec.FProfile p] -> Just p
   _ -> error "More than one element"
 
 extractFVersion :: [Spec.Prop] -> Maybe (Int, Int)
