@@ -162,6 +162,7 @@ cFormat tm (Parameter _ t _ p) = t'
 		UnderscoreGLfuncptr -> "%p"
 		GLvoidStarConst -> "%p"
 		GLvdpauSurfaceNV -> "%td" -- typedef GLintptr GLvdpauSurfaceNV;
+		GLdebugproc -> "GLDEBUGPROC"
 		GLdebugprocAMD -> "GLDEBUGPROCAMD"
 		GLdebugprocARB -> "GLDEBUGPROCARB"
 

@@ -426,6 +426,7 @@ data TmType =
   | GLvoid
   | GLvoidStarConst
   | GLvdpauSurfaceNV
+  | GLdebugproc
   | GLdebugprocAMD
   | GLdebugprocARB
   deriving (Eq, Read, Show)
@@ -474,6 +475,7 @@ pTmType = choice $ map try
   , GLvdpauSurfaceNV <$ token "GLvdpauSurfaceNV"
   , GLdebugprocAMD <$ token "GLDEBUGPROCAMD"
   , GLdebugprocARB <$ token "GLDEBUGPROCARB"
+  , GLdebugproc    <$ token "GLDEBUGPROC"
   , read <$> identifier
   ]
 
