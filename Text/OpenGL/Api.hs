@@ -1,6 +1,6 @@
 module Text.OpenGL.Api where
 
-import Data.List (partition)
+import Data.List (partition, find)
 import qualified Data.Map as M
 
 import qualified Text.OpenGL.Spec as Spec
@@ -13,6 +13,7 @@ data Function = Function
   , funName :: String
   , funParameters :: [Parameter]
   , funCategory :: Category
+  , funProfile  :: (Maybe Profile)
   , funOldCategory :: Maybe Category
   , funSubcategory :: Maybe String
   , funVersion :: Maybe (Int,Int)
@@ -47,6 +48,7 @@ mkFunction a b (Spec.Return r:ps) =
     , funName = a
     , funParameters = args
     , funCategory = c
+    , funProfile  = extractProfile ps''
     , funOldCategory = c'
     , funSubcategory = extractSubcategory ps''
     , funVersion = extractFVersion ps''
@@ -73,11 +75,17 @@ mkFunction a b (Spec.Return r:ps) =
   f _ = False
   h (Spec.Category _ _) = True
   h _ = False
-  args = zipWith g b params
-  g x0 (Spec.Param x1 (Spec.ParamType x y z))
-    | x0 == x1 = Parameter x0 x y z
-    | otherwise = error "argument and parameter don't match"
-  g _ _ = error "can't happen"
+  args = map (lookupParam params) b
+  lookupParam pars arg = 
+    case find (\(Spec.Param x1 _) -> x1 == arg) pars of
+      Just (Spec.Param _ (Spec.ParamType x y z)) -> Parameter arg x y z
+      Nothing -> error $ "opengl-api -> mkFunction: parameter not found " ++ arg ++ " for function " ++ a
+      Just _ -> error "opengl-api -> mkFunction: impossible"
+--  args = zipWith g b params
+--  g x0 (Spec.Param x1 (Spec.ParamType x y z))
+--    | x0 == x1 = Parameter x0 x y z
+--    | otherwise = error "argument and parameter don't match"
+--  g _ _ = error "can't happen"
 
 mkFunction _ _ _ =
   error "The list of properties doesn't begin with the return type."
@@ -112,6 +120,12 @@ extractSubcategory :: [Spec.Prop] -> Maybe String
 extractSubcategory l = case filter isSubcategory l of
   [] -> Nothing
   [Spec.Subcategory s] -> Just s
+  _ -> error "More than one element"
+
+extractProfile :: [Spec.Prop] -> Maybe Profile
+extractProfile l = case filter isProfile l of
+  [] -> Nothing
+  [Spec.FProfile p] -> Just p
   _ -> error "More than one element"
 
 extractFVersion :: [Spec.Prop] -> Maybe (Int, Int)
