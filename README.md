@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.org/Laar/opengl-api.png)](https://travis-ci.org/Laar/opengl-api)
 # opengl-api
 
 Represent and parse spec files from the OpenGL [registry][].

@@ -5,6 +5,8 @@
 -- of using the one provided by Text.OpenGL.Api). This is necessary as
 -- the passthru lines get output to the glext.h file (the representation
 -- used in Text.OpenGL.Api drops those lines).
+--
+-- TODO: The profiles are dropped, is this correct
 module Text.OpenGL.ExtHeader where
 
 import Data.List (intersperse, nubBy)
@@ -149,7 +151,7 @@ showValue v = case v of
   Spec.Deci i -> show i
   Spec.Identifier x -> x
 
-showHex' :: Integral a => Int -> a -> String
+showHex' :: (Show a, Integral a) => Int -> a -> String
 showHex' l i = replicate (l - length h) '0' ++ h
   where h = map toUpper (showHex i "")
 
@@ -162,9 +164,11 @@ groupEnums xs = go xs
   go (Spec.Passthru _ : _) = error "encountering a Passthru before a Start"
   go (Spec.Enum _ _ _ : _) = error "encoutering an Enum before a Start"
   go (Spec.Use _ _ : _) = error "encoutering a Use before a Start"
+  go (Spec.Profile _ : _) = error "encountering a Profile before a Start"
   go [] = []
   goS e (Spec.Comment _ : zs) = goS e zs
   goS e (Spec.BlankLine : zs) = goS e zs
+  goS e (Spec.Profile _  : zs) = goS e zs
   goS e (Spec.Start se _ : zs) = e : goS (se, []) zs
   goS (se, es) (Spec.Passthru str : zs) =
     goS (se, (es++[EPassthru str])) zs
